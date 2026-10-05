@@ -8,9 +8,9 @@
 
 ; ─── Metadata ──────────────────────────────────────────────────────────────
 !define APP_NAME        "Seal Desktop"
-!define APP_VERSION     "1.0.0"
+!define APP_VERSION     "1.2.0"
 !define APP_PUBLISHER   "Seal Desktop Team"
-!define APP_URL         "https://github.com/your-username/seal-desktop"
+!define APP_URL         "https://github.com/Youcef-fareh/seal-desk"
 !define APP_EXE         "SealDesktop.exe"
 !define INSTALL_DIR     "$PROGRAMFILES64\${APP_NAME}"
 !define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
