@@ -39,6 +39,7 @@ def _get_bundled_ffmpeg() -> str | None:
     """Return the FFmpeg binary bundled via imageio-ffmpeg, if available."""
     try:
         import imageio_ffmpeg  # noqa: PLC0415
+
         path = imageio_ffmpeg.get_ffmpeg_exe()
         if path and os.path.isfile(path) and os.access(path, os.X_OK):
             return path
