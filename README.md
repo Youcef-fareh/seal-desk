@@ -4,10 +4,10 @@
 
 ### Cross-Platform Video & Audio Downloader
 
-[![Build & Release](https://img.shields.io/github/actions/workflow/status/your-username/seal-desktop/build-release.yml?label=Build&logo=github)](https://github.com/your-username/seal-desktop/actions)
-[![CI](https://img.shields.io/github/actions/workflow/status/your-username/seal-desktop/ci.yml?label=CI&logo=github)](https://github.com/your-username/seal-desktop/actions)
-[![Release](https://img.shields.io/github/v/release/your-username/seal-desktop?label=Latest&logo=github)](https://github.com/your-username/seal-desktop/releases/latest)
-[![License](https://img.shields.io/github/license/your-username/seal-desktop?color=blue)](LICENSE)
+[![Build & Release](https://img.shields.io/github/actions/workflow/status/Youcef-fareh/seal-desk/build-release.yml?label=Build&logo=github)](https://github.com/Youcef-fareh/seal-desk/actions)
+[![CI](https://img.shields.io/github/actions/workflow/status/Youcef-fareh/seal-desk/ci.yml?label=CI&logo=github)](https://github.com/Youcef-fareh/seal-desk/actions)
+[![Release](https://img.shields.io/github/v/release/Youcef-fareh/seal-desk?label=Latest&logo=github)](https://github.com/Youcef-fareh/seal-desk/releases/latest)
+[![License](https://img.shields.io/github/license/Youcef-fareh/seal-desk?color=blue)](LICENSE)
 [![Python](https://img.shields.io/badge/Python-3.12-blue?logo=python)](https://python.org)
 [![Powered by yt-dlp](https://img.shields.io/badge/Powered%20by-yt--dlp-red)](https://github.com/yt-dlp/yt-dlp)
 
@@ -22,7 +22,11 @@ Download from **1000+ sites** including YouTube, SoundCloud, Twitch, Twitter/X, 
 
 | Feature | Details |
 |---------|---------|
-| 📹 **Video Download** | Any quality: 4K, 1080p, 720p, 480p, 360p |
+| 📹 **Video Download & Merging** | Any quality: 4K, 1080p, 720p, 480p, 360p with seamless audio-video merging |
+| 🗂 **Sequential Queue** | Stage multiple links, configure options per item, and download successively (one-after-one) |
+| ⏯ **Pause, Resume & Delete** | Full control over downloads: pause active items, resume from partial files, or delete anytime |
+| 🌍 **Bilingual Interface** | Instant language switching between English and Arabic (العربية) |
+| 🔄 **App Auto-Updater** | Automatic startup update checking, incremental release changelogs, and direct installer updating |
 | 🎵 **Audio Extraction** | MP3, M4A, OPUS, FLAC, WAV |
 | 📂 **Playlist Support** | Download full playlists with organized subdirectories |
 | 🏷 **Metadata Embedding** | Titles, artists, thumbnails, chapters |
@@ -32,7 +36,7 @@ Download from **1000+ sites** including YouTube, SoundCloud, Twitch, Twitter/X, 
 | 🌐 **Proxy Support** | HTTP/HTTPS/SOCKS proxy support |
 | 📊 **Live Progress** | Real-time speed, ETA, and progress per download |
 | 🎨 **Dark UI** | Modern dark interface with violet accent |
-| ⚙ **Flexible Settings** | Output templates, rate limiting, cookies file |
+| ⚙ **Flexible Settings** | Output templates, rate limiting, cookies file, FFmpeg auto-installer |
 
 ## 🖥 Supported Platforms
 

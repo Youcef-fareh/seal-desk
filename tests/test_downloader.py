@@ -1,5 +1,6 @@
 """
-Seal Desktop – Core Downloader Tests
+Seal Desktop – Comprehensive Unit Tests
+Tests core downloader, sequential queue, pause/resume, deletion, i18n, updater, and settings.
 """
 
 from __future__ import annotations
@@ -13,6 +14,9 @@ from src.core.downloader import (
     _fmt_eta,
     _fmt_speed,
 )
+from src.core.ffmpeg_utils import get_ffmpeg_path, is_ffmpeg_available
+from src.core.i18n import get_language, is_rtl, set_language, t
+from src.core.updater import _parse_version_tuple, is_newer_version
 
 # ──────────────────────────────────────────────
 # Utility function tests
@@ -48,12 +52,13 @@ def test_download_preferences_defaults():
     assert prefs.extract_audio is False
     assert prefs.audio_format == "mp3"
     assert prefs.video_quality == "best"
+    assert prefs.video_container == "mp4"
     assert prefs.embed_metadata is True
     assert prefs.concurrent_fragments == 4
 
 
 # ──────────────────────────────────────────────
-# Downloader state machine
+# Downloader state machine & Queue tests
 # ──────────────────────────────────────────────
 
 
@@ -73,10 +78,106 @@ def test_downloader_clear_completed_empty():
 
 
 def test_download_task_defaults():
-    t = DownloadTask()
-    assert t.state == DownloadState.IDLE
-    assert t.progress == 0.0
-    assert t.task_id != ""
+    t_task = DownloadTask()
+    assert t_task.state == DownloadState.IDLE
+    assert t_task.progress == 0.0
+    assert t_task.task_id != ""
+
+
+def test_downloader_queue_and_controls():
+    dl = Downloader()
+    prefs = DownloadPreferences()
+
+    # Queue an item (should remain in QUEUED state until queue runs)
+    task_id = dl.queue_download("https://example.com/watch?v=123", prefs)
+    tasks = dl.get_tasks()
+    assert len(tasks) == 1
+    assert tasks[0].task_id == task_id
+    assert tasks[0].state == DownloadState.QUEUED
+    assert dl.get_queued_count() == 1
+
+    # Pause the queued item
+    dl.pause_download(task_id)
+    assert tasks[0].state == DownloadState.PAUSED
+    assert dl.get_queued_count() == 0
+
+    # Resume the item
+    dl.resume_download(task_id)
+    assert tasks[0].state == DownloadState.QUEUED
+    assert dl.get_queued_count() == 1
+
+    # Delete the task from queue
+    dl.delete_task(task_id)
+    assert len(dl.get_tasks()) == 0
+    assert dl.get_queued_count() == 0
+
+
+def test_downloader_queue_toggle():
+    dl = Downloader()
+    assert dl.is_queue_running() is False
+    dl.start_queue()
+    assert dl.is_queue_running() is True
+    dl.pause_queue()
+    assert dl.is_queue_running() is False
+
+
+# ──────────────────────────────────────────────
+# i18n Localization tests
+# ──────────────────────────────────────────────
+
+
+def test_i18n_translations():
+    set_language("en")
+    assert get_language() == "en"
+    assert is_rtl() is False
+    assert t("page_download_title") == "Download"
+    assert "queue" in t("btn_add_queue").lower()
+
+    # Switch to Arabic
+    set_language("ar")
+    assert get_language() == "ar"
+    assert is_rtl() is True
+    assert t("page_download_title") == "التحميل"
+    assert "الانتظار" in t("btn_add_queue")
+
+    # Formatting interpolation
+    formatted = t("queue_summary", count=3, active=1)
+    assert "3" in formatted and "1" in formatted
+
+    # Fallback to key or en if unknown
+    assert t("non_existent_key_xyz") == "non_existent_key_xyz"
+
+    # Reset back to English
+    set_language("en")
+    assert get_language() == "en"
+
+
+# ──────────────────────────────────────────────
+# FFmpeg utilities tests
+# ──────────────────────────────────────────────
+
+
+def test_ffmpeg_utils():
+    # Should safely return bool or None without exception
+    assert isinstance(is_ffmpeg_available(), bool)
+    path = get_ffmpeg_path()
+    assert path is None or isinstance(path, str)
+
+
+# ──────────────────────────────────────────────
+# Updater version comparisons
+# ──────────────────────────────────────────────
+
+
+def test_updater_version_check():
+    assert _parse_version_tuple("v1.2.0") == (1, 2, 0)
+    assert _parse_version_tuple("1.0.0") == (1, 0, 0)
+    assert _parse_version_tuple("v2.0-beta") == (2, 0)
+
+    assert is_newer_version("1.2.0", "1.1.0") is True
+    assert is_newer_version("v2.0.0", "1.1.0") is True
+    assert is_newer_version("1.1.0", "1.1.0") is False
+    assert is_newer_version("1.0.5", "1.1.0") is False
 
 
 # ──────────────────────────────────────────────
@@ -90,6 +191,8 @@ def test_settings_get_default():
     s = Settings()
     assert s.get("extract_audio") is False
     assert s.get("audio_format") == "mp3"
+    assert s.get("language") in ("en", "ar")
+    assert s.get("video_container") in ("mp4", "mkv")
     assert isinstance(s.get("output_dir"), str)
 
 
@@ -97,7 +200,7 @@ def test_settings_set_get():
     from src.core.settings import Settings
 
     s = Settings()
-    s._data["test_key"] = "test_value"  # direct injection, no file I/O
+    s._data["test_key"] = "test_value"
     assert s.get("test_key") == "test_value"
 
 

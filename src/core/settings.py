@@ -22,14 +22,19 @@ def _config_path() -> Path:
 
 
 DEFAULTS: dict[str, Any] = {
+    # Localization
+    "language": "en",  # "en" | "ar"
     # Download
     "output_dir": str(Path.home() / "Downloads" / "Seal"),
     "output_template": "%(title).200B.%(ext)s",
     "playlist_subdir": True,
-    # Format
+    "restrict_filenames": False,
+    # Format & Merging
     "extract_audio": False,
     "audio_format": "mp3",
     "video_quality": "best",
+    "video_container": "mp4",  # "mp4" | "mkv"
+    "auto_merge": True,
     # Post-processing
     "embed_metadata": True,
     "embed_thumbnail": True,
@@ -41,11 +46,13 @@ DEFAULTS: dict[str, Any] = {
     "concurrent_fragments": 4,
     "use_aria2c": False,
     "cookies_file": "",
+    # Updates
+    "auto_check_updates": True,
     # UI
     "theme": "dark",
     "accent_color": "#8B5CF6",  # violet-500
     "window_width": 1100,
-    "window_height": 720,
+    "window_height": 740,
     "window_x": -1,
     "window_y": -1,
     # History
@@ -111,6 +118,10 @@ class Settings:
     @property
     def accent_color(self) -> str:
         return self.get("accent_color")
+
+    @property
+    def language(self) -> str:
+        return self.get("language")
 
 
 # Singleton

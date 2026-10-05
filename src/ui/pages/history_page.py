@@ -1,6 +1,6 @@
 """
 Seal Desktop – History Page
-Shows all previously downloaded items with search & open-folder actions.
+Shows all previously downloaded items with search, folder opening, and bilingual support.
 """
 
 from __future__ import annotations
@@ -11,6 +11,7 @@ import sys
 import tkinter as tk
 from collections.abc import Callable
 
+from ...core.i18n import add_language_listener, remove_language_listener, t
 from ...core.settings import settings
 from ..theme import FONTS, SPACING
 from ..theme import PALETTE as P
@@ -64,7 +65,7 @@ class HistoryRow(tk.Frame):
         path = self._entry.get("output", "")
         if not path:
             return
-        folder = os.path.dirname(path)
+        folder = os.path.dirname(path) if os.path.isfile(path) else path
         if sys.platform == "win32":
             os.startfile(folder)
         elif sys.platform == "darwin":
@@ -78,27 +79,36 @@ class HistoryPage(tk.Frame):
         super().__init__(parent, bg=P["bg_0"])
         self._nav = nav_callback
         self._all_entries: list[dict] = []
+        add_language_listener(self._retranslate)
+
         self._build()
         self._load()
+
+    def destroy(self) -> None:
+        remove_language_listener(self._retranslate)
+        super().destroy()
 
     def _build(self) -> None:
         header_row = tk.Frame(self, bg=P["bg_0"], padx=SPACING["lg"], pady=SPACING["md"])
         header_row.pack(fill="x")
 
-        SealLabel(header_row, "History", style="heading2", bg=P["bg_0"]).pack(side="left")
-        SealButton(
+        self._title_lbl = SealLabel(header_row, t("history_title"), style="heading2", bg=P["bg_0"])
+        self._title_lbl.pack(side="left")
+
+        self._clear_btn = SealButton(
             header_row,
-            text="🗑  Clear all",
+            text=t("btn_clear_all"),
             variant="danger",
             command=self._clear,
             height=32,
-        ).pack(side="right")
+        )
+        self._clear_btn.pack(side="right")
 
         # Search
         search_row = tk.Frame(self, bg=P["bg_0"], padx=SPACING["lg"])
         search_row.pack(fill="x", pady=(0, SPACING["sm"]))
 
-        self._search_entry = SealEntry(search_row, placeholder="Search history…")
+        self._search_entry = SealEntry(search_row, placeholder=t("search_history_placeholder"))
         self._search_entry.pack(fill="x")
         self._search_entry.bind_entry("<KeyRelease>", lambda _: self._filter())
 
@@ -108,7 +118,7 @@ class HistoryPage(tk.Frame):
 
         self._empty_lbl = tk.Label(
             self._scroll.inner,
-            text="No downloads yet.\nStart downloading to build your history! 📼",
+            text=t("empty_history"),
             bg=P["bg_0"],
             fg=P["text_tertiary"],
             font=FONTS["body"],
@@ -149,3 +159,8 @@ class HistoryPage(tk.Frame):
 
     def refresh(self) -> None:
         self._load()
+
+    def _retranslate(self) -> None:
+        self._title_lbl.configure_text(t("history_title"))
+        self._clear_btn.configure_text(t("btn_clear_all"))
+        self._empty_lbl.configure(text=t("empty_history"))
