@@ -6,7 +6,6 @@ Persists user settings to a JSON file in the platform's config directory.
 from __future__ import annotations
 
 import json
-import os
 from pathlib import Path
 from typing import Any
 
@@ -44,7 +43,7 @@ DEFAULTS: dict[str, Any] = {
     "cookies_file": "",
     # UI
     "theme": "dark",
-    "accent_color": "#8B5CF6",   # violet-500
+    "accent_color": "#8B5CF6",  # violet-500
     "window_width": 1100,
     "window_height": 720,
     "window_x": -1,
@@ -90,7 +89,7 @@ class Settings:
         # Avoid duplicates by URL
         history = [h for h in history if h.get("url") != entry.get("url")]
         history.insert(0, entry)
-        history = history[:200]   # cap at 200 entries
+        history = history[:200]  # cap at 200 entries
         self._data["history"] = history
         self.save()
 

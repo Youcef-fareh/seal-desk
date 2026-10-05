@@ -6,13 +6,13 @@ Shell layout: sidebar + page router.
 from __future__ import annotations
 
 import tkinter as tk
-from typing import Callable
+from collections.abc import Callable
 
 from .pages.download_page import DownloadPage
 from .pages.history_page import HistoryPage
 from .pages.settings_page import SettingsPage
-from .theme import FONTS, PALETTE as P, SIDEBAR_WIDTH, SPACING, TOPBAR_HEIGHT
-
+from .theme import FONTS, SIDEBAR_WIDTH, SPACING
+from .theme import PALETTE as P
 
 # ──────────────────────────────────────────────
 # Sidebar nav item
@@ -38,17 +38,30 @@ class NavItem(tk.Frame):
         self._indicator.pack(side="left", fill="y")
 
         self._content = tk.Frame(self, bg=P["bg_1"], cursor="hand2")
-        self._content.pack(side="left", fill="both", expand=True, padx=SPACING["sm"], pady=SPACING["sm"])
+        self._content.pack(
+            side="left", fill="both", expand=True, padx=SPACING["sm"], pady=SPACING["sm"]
+        )
 
         self._icon_lbl = tk.Label(
-            self._content, text=icon, bg=P["bg_1"], fg=P["text_primary"],
-            font=("Segoe UI", 18), anchor="w", cursor="hand2"
+            self._content,
+            text=icon,
+            bg=P["bg_1"],
+            fg=P["text_primary"],
+            font=("Segoe UI", 18),
+            anchor="w",
+            cursor="hand2",
         )
         self._icon_lbl.pack(side="left")
 
         self._text_lbl = tk.Label(
-            self._content, text=label, bg=P["bg_1"], fg=P["text_primary"],
-            font=FONTS["body"], anchor="w", padx=SPACING["sm"], cursor="hand2"
+            self._content,
+            text=label,
+            bg=P["bg_1"],
+            fg=P["text_primary"],
+            font=FONTS["body"],
+            anchor="w",
+            padx=SPACING["sm"],
+            cursor="hand2",
         )
         self._text_lbl.pack(side="left")
 
@@ -121,13 +134,19 @@ class AppShell(tk.Frame):
         title_frame.pack(side="left", padx=SPACING["sm"])
 
         tk.Label(
-            title_frame, text="Seal", bg=P["bg_1"],
-            fg=P["text_primary"], font=FONTS["heading1"],
+            title_frame,
+            text="Seal",
+            bg=P["bg_1"],
+            fg=P["text_primary"],
+            font=FONTS["heading1"],
         ).pack(anchor="w")
 
         tk.Label(
-            title_frame, text="Desktop", bg=P["bg_1"],
-            fg=P["accent"], font=FONTS["body_sm"],
+            title_frame,
+            text="Desktop",
+            bg=P["bg_1"],
+            fg=P["accent"],
+            font=FONTS["body_sm"],
         ).pack(anchor="w")
 
         # Separator
@@ -136,7 +155,7 @@ class AppShell(tk.Frame):
         # Nav items
         nav_defs = [
             ("download", "⬇", "Download"),
-            ("history",  "📋", "History"),
+            ("history", "📋", "History"),
             ("settings", "⚙", "Settings"),
         ]
 
@@ -157,7 +176,9 @@ class AppShell(tk.Frame):
         # Bottom: version
         bottom_frame = tk.Frame(sidebar, bg=P["bg_1"])
         bottom_frame.pack(side="bottom", fill="x", pady=SPACING["md"])
-        tk.Frame(bottom_frame, bg=P["divider"], height=1).pack(fill="x", padx=SPACING["md"], pady=(0, SPACING["sm"]))
+        tk.Frame(bottom_frame, bg=P["divider"], height=1).pack(
+            fill="x", padx=SPACING["md"], pady=(0, SPACING["sm"])
+        )
         tk.Label(
             bottom_frame,
             text="v1.0.0  ·  Powered by yt-dlp",

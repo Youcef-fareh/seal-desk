@@ -6,15 +6,15 @@ Full settings UI for download preferences, network, and UI options.
 from __future__ import annotations
 
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
 from tkinter import filedialog
-from typing import Callable
 
 from ...core.settings import settings
 from ...core.updater import get_ytdlp_version, update_ytdlp
-from ..theme import FONTS, PALETTE as P, SPACING
-from ..widgets import SealButton, SealEntry, SealLabel, SealScrollFrame, SealSwitch
-
+from ..theme import FONTS, SPACING
+from ..theme import PALETTE as P
+from ..widgets import SealButton, SealEntry, SealScrollFrame, SealSwitch
 
 # ──────────────────────────────────────────────
 # Helpers
@@ -42,7 +42,15 @@ def _section(parent: tk.Widget, title: str) -> tk.Frame:
 def _row(parent: tk.Frame, label: str) -> tuple[tk.Frame, tk.Label]:
     row = tk.Frame(parent, bg=P["bg_1"])
     row.pack(fill="x", pady=SPACING["xs"])
-    lbl = tk.Label(row, text=label, bg=P["bg_1"], fg=P["text_primary"], font=FONTS["body"], anchor="w", width=28)
+    lbl = tk.Label(
+        row,
+        text=label,
+        bg=P["bg_1"],
+        fg=P["text_primary"],
+        font=FONTS["body"],
+        anchor="w",
+        width=28,
+    )
     lbl.pack(side="left")
     return row, lbl
 
@@ -75,14 +83,22 @@ def _dropdown_row(parent: tk.Frame, label: str, key: str, options: list[str]) ->
     var.trace_add("write", _on_change)
     menu = tk.OptionMenu(row, var, *options)
     menu.configure(
-        bg=P["bg_2"], fg=P["text_primary"],
-        activebackground=P["bg_3"], activeforeground=P["text_primary"],
-        highlightthickness=0, relief="flat", font=FONTS["body"], bd=0,
+        bg=P["bg_2"],
+        fg=P["text_primary"],
+        activebackground=P["bg_3"],
+        activeforeground=P["text_primary"],
+        highlightthickness=0,
+        relief="flat",
+        font=FONTS["body"],
+        bd=0,
     )
     menu["menu"].configure(
-        bg=P["bg_2"], fg=P["text_primary"],
-        activebackground=P["accent"], activeforeground="white",
-        font=FONTS["body"], bd=0,
+        bg=P["bg_2"],
+        fg=P["text_primary"],
+        activebackground=P["accent"],
+        activeforeground="white",
+        font=FONTS["body"],
+        bd=0,
     )
     menu.pack(side="right")
     return var
@@ -127,7 +143,9 @@ class SettingsPage(tk.Frame):
             font=FONTS["body_sm"],
         )
         self._out_lbl.pack(side="right", padx=(0, SPACING["sm"]))
-        SealButton(row, text="Browse", variant="secondary", command=self._pick_dir, height=30).pack(side="right")
+        SealButton(row, text="Browse", variant="secondary", command=self._pick_dir, height=30).pack(
+            side="right"
+        )
 
         _entry_row(sec, "Output template", "output_template", "%(title).200B.%(ext)s")
         _toggle_row(sec, "Playlist subdirectory", "playlist_subdir")
@@ -136,8 +154,15 @@ class SettingsPage(tk.Frame):
         # ── Format ──────────────────────────────────
         sec2 = _section(inner, "Format")
         _toggle_row(sec2, "Audio only by default", "extract_audio")
-        _dropdown_row(sec2, "Audio format", "audio_format", ["mp3", "m4a", "opus", "flac", "wav", "best"])
-        _dropdown_row(sec2, "Video quality", "video_quality", ["best", "2160", "1440", "1080", "720", "480", "360"])
+        _dropdown_row(
+            sec2, "Audio format", "audio_format", ["mp3", "m4a", "opus", "flac", "wav", "best"]
+        )
+        _dropdown_row(
+            sec2,
+            "Video quality",
+            "video_quality",
+            ["best", "2160", "1440", "1080", "720", "480", "360"],
+        )
 
         # ── Post-processing ─────────────────────────
         sec3 = _section(inner, "Post-processing")
@@ -155,10 +180,17 @@ class SettingsPage(tk.Frame):
         row_cf, _ = _row(sec4, "Concurrent fragments")
         cf_var = tk.IntVar(value=settings.get("concurrent_fragments"))
         cf_spin = tk.Spinbox(
-            row_cf, from_=1, to=32, textvariable=cf_var, width=5,
-            bg=P["entry_bg"], fg=P["text_primary"],
-            insertbackground=P["accent"], relief="flat",
-            font=FONTS["body"], bd=1,
+            row_cf,
+            from_=1,
+            to=32,
+            textvariable=cf_var,
+            width=5,
+            bg=P["entry_bg"],
+            fg=P["text_primary"],
+            insertbackground=P["accent"],
+            relief="flat",
+            font=FONTS["body"],
+            bd=1,
             command=lambda: settings.set("concurrent_fragments", cf_var.get()),
         )
         cf_spin.pack(side="right")
@@ -166,11 +198,16 @@ class SettingsPage(tk.Frame):
         # Cookies
         row_c, _ = _row(sec4, "Cookies file (Netscape)")
         self._cookie_lbl = tk.Label(
-            row_c, text=self._short(settings.get("cookies_file") or "None"),
-            bg=P["bg_1"], fg=P["text_secondary"], font=FONTS["body_sm"],
+            row_c,
+            text=self._short(settings.get("cookies_file") or "None"),
+            bg=P["bg_1"],
+            fg=P["text_secondary"],
+            font=FONTS["body_sm"],
         )
         self._cookie_lbl.pack(side="right", padx=(0, SPACING["sm"]))
-        SealButton(row_c, text="Browse", variant="secondary", command=self._pick_cookies, height=30).pack(side="right")
+        SealButton(
+            row_c, text="Browse", variant="secondary", command=self._pick_cookies, height=30
+        ).pack(side="right")
 
         # ── Updates ─────────────────────────────────
         sec5 = _section(inner, "Updates")
@@ -195,7 +232,9 @@ class SettingsPage(tk.Frame):
         )
         self._ytdlp_update_btn.pack(side="right")
 
-        self._ytdlp_msg = tk.Label(sec5, text="", bg=P["bg_1"], fg=P["success"], font=FONTS["body_sm"])
+        self._ytdlp_msg = tk.Label(
+            sec5, text="", bg=P["bg_1"], fg=P["success"], font=FONTS["body_sm"]
+        )
         self._ytdlp_msg.pack(anchor="e", pady=(0, SPACING["xs"]))
 
         # ── About ────────────────────────────────────

@@ -9,11 +9,12 @@ import os
 import subprocess
 import sys
 import tkinter as tk
-from typing import Callable
+from collections.abc import Callable
 
 from ...core.settings import settings
-from ..theme import FONTS, PALETTE as P, SPACING
-from ..widgets import SealButton, SealCard, SealEntry, SealLabel, SealScrollFrame
+from ..theme import FONTS, SPACING
+from ..theme import PALETTE as P
+from ..widgets import SealButton, SealEntry, SealLabel, SealScrollFrame
 
 
 class HistoryRow(tk.Frame):
@@ -84,9 +85,7 @@ class HistoryPage(tk.Frame):
         header_row = tk.Frame(self, bg=P["bg_0"], padx=SPACING["lg"], pady=SPACING["md"])
         header_row.pack(fill="x")
 
-        SealLabel(header_row, "History", style="heading2", bg=P["bg_0"]).pack(
-            side="left"
-        )
+        SealLabel(header_row, "History", style="heading2", bg=P["bg_0"]).pack(side="left")
         SealButton(
             header_row,
             text="🗑  Clear all",
@@ -139,8 +138,7 @@ class HistoryPage(tk.Frame):
             filtered = [
                 e
                 for e in self._all_entries
-                if q in (e.get("title") or "").lower()
-                or q in (e.get("url") or "").lower()
+                if q in (e.get("title") or "").lower() or q in (e.get("url") or "").lower()
             ]
             self._render(filtered)
 

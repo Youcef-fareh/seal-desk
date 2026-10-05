@@ -5,15 +5,15 @@ The main download UI: URL input, format selection, progress cards.
 
 from __future__ import annotations
 
-import threading
 import tkinter as tk
+from collections.abc import Callable
 from pathlib import Path
-from tkinter import filedialog, messagebox
-from typing import Callable, Optional
+from tkinter import filedialog
 
 from ..core.downloader import DownloadPreferences, DownloadState, DownloadTask, downloader
 from ..core.settings import settings
-from .theme import FONTS, PALETTE as P, SPACING
+from .theme import FONTS, SPACING
+from .theme import PALETTE as P
 from .widgets import (
     SealButton,
     SealCard,
@@ -23,7 +23,6 @@ from .widgets import (
     SealScrollFrame,
     SealSwitch,
 )
-
 
 # ──────────────────────────────────────────────
 # Download card (one per active download)
@@ -102,7 +101,8 @@ class DownloadCard(SealCard):
             DownloadState.FETCHING_INFO: ("🔍  Fetching info…", P["info"]),
             DownloadState.DOWNLOADING: ("⬇  Downloading", P["accent"]),
             DownloadState.DOWNLOADING_PLAYLIST: (
-                f"⬇  Playlist {task.playlist_index}/{task.playlist_count}", P["accent"]
+                f"⬇  Playlist {task.playlist_index}/{task.playlist_count}",
+                P["accent"],
             ),
             DownloadState.CONVERTING: ("⚙  Processing…", P["warning"]),
             DownloadState.COMPLETED: ("✅  Completed", P["success"]),
@@ -135,7 +135,9 @@ class DownloadCard(SealCard):
 
     def _cancel(self) -> None:
         if self.task.state in (
-            DownloadState.COMPLETED, DownloadState.CANCELLED, DownloadState.ERROR
+            DownloadState.COMPLETED,
+            DownloadState.CANCELLED,
+            DownloadState.ERROR,
         ):
             self.destroy()
         else:
@@ -184,9 +186,7 @@ class DownloadPage(tk.Frame):
         input_area = tk.Frame(self, bg=P["bg_1"], padx=SPACING["lg"], pady=SPACING["md"])
         input_area.pack(fill="x", padx=SPACING["lg"], pady=(SPACING["lg"], 0))
 
-        header = SealLabel(
-            input_area, "Download", style="heading2", bg=P["bg_1"]
-        )
+        header = SealLabel(input_area, "Download", style="heading2", bg=P["bg_1"])
         header.pack(anchor="w", pady=(0, SPACING["sm"]))
 
         # URL row
@@ -340,7 +340,8 @@ class DownloadPage(tk.Frame):
         task_id = downloader.start_download(url, self._prefs)
 
         # Optimistically create a placeholder card
-        from ..core.downloader import DownloadTask, DownloadState
+        from ..core.downloader import DownloadState, DownloadTask
+
         t = DownloadTask(task_id=task_id, url=url, state=DownloadState.FETCHING_INFO)
         self._create_card(t)
 

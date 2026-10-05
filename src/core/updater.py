@@ -8,16 +8,16 @@ from __future__ import annotations
 import subprocess
 import sys
 import threading
-from typing import Callable, Optional
+from collections.abc import Callable
 
 import requests
 
-REPO = "your-username/seal-desktop"    # Update on release
+REPO = "your-username/seal-desktop"  # Update on release
 YTDLP_REPO = "yt-dlp/yt-dlp"
 CURRENT_VERSION = "1.0.0"
 
 
-def get_latest_release(repo: str) -> Optional[dict]:
+def get_latest_release(repo: str) -> dict | None:
     try:
         resp = requests.get(
             f"https://api.github.com/repos/{repo}/releases/latest",
@@ -30,8 +30,9 @@ def get_latest_release(repo: str) -> Optional[dict]:
         return None
 
 
-def check_app_update(callback: Callable[[Optional[str], Optional[str]], None]) -> None:
+def check_app_update(callback: Callable[[str | None, str | None], None]) -> None:
     """Async check. Calls callback(version, download_url) or (None, None) on failure."""
+
     def _run() -> None:
         release = get_latest_release(REPO)
         if not release:
@@ -49,9 +50,10 @@ def check_app_update(callback: Callable[[Optional[str], Optional[str]], None]) -
 
 def update_ytdlp(callback: Callable[[bool, str], None]) -> None:
     """Update yt-dlp in-place using pip. Calls callback(success, message)."""
+
     def _run() -> None:
         try:
-            result = subprocess.run(
+            subprocess.run(
                 [sys.executable, "-m", "pip", "install", "-U", "yt-dlp"],
                 capture_output=True,
                 text=True,
@@ -69,6 +71,7 @@ def update_ytdlp(callback: Callable[[bool, str], None]) -> None:
 def get_ytdlp_version() -> str:
     try:
         import yt_dlp
+
         return yt_dlp.version.__version__
     except Exception:
         return "unknown"

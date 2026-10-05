@@ -4,20 +4,15 @@ Seal Desktop – Core Downloader Tests
 
 from __future__ import annotations
 
-from unittest.mock import MagicMock, patch
-
-import pytest
-
 from src.core.downloader import (
+    Downloader,
     DownloadPreferences,
     DownloadState,
     DownloadTask,
-    Downloader,
     _fmt_bytes,
     _fmt_eta,
     _fmt_speed,
 )
-
 
 # ──────────────────────────────────────────────
 # Utility function tests
@@ -64,7 +59,7 @@ def test_download_preferences_defaults():
 
 def test_downloader_cancel():
     dl = Downloader()
-    dl.cancel_download("nonexistent-id")   # Should not raise
+    dl.cancel_download("nonexistent-id")  # Should not raise
 
 
 def test_downloader_get_tasks_empty():
@@ -74,7 +69,7 @@ def test_downloader_get_tasks_empty():
 
 def test_downloader_clear_completed_empty():
     dl = Downloader()
-    dl.clear_completed()    # Should not raise
+    dl.clear_completed()  # Should not raise
 
 
 def test_download_task_defaults():
@@ -91,6 +86,7 @@ def test_download_task_defaults():
 
 def test_settings_get_default():
     from src.core.settings import Settings
+
     s = Settings()
     assert s.get("extract_audio") is False
     assert s.get("audio_format") == "mp3"
@@ -99,13 +95,15 @@ def test_settings_get_default():
 
 def test_settings_set_get():
     from src.core.settings import Settings
+
     s = Settings()
-    s._data["test_key"] = "test_value"    # direct injection, no file I/O
+    s._data["test_key"] = "test_value"  # direct injection, no file I/O
     assert s.get("test_key") == "test_value"
 
 
 def test_settings_history():
     from src.core.settings import Settings
+
     s = Settings()
     s._data["history"] = []
     s.add_history({"url": "https://example.com", "title": "Test"})
@@ -120,6 +118,7 @@ def test_settings_history():
 
 def test_settings_clear_history():
     from src.core.settings import Settings
+
     s = Settings()
     s._data["history"] = [{"url": "x"}]
     s.clear_history()

@@ -8,13 +8,12 @@ from __future__ import annotations
 
 import threading
 import uuid
+from collections.abc import Callable
 from dataclasses import dataclass, field
 from enum import Enum, auto
 from pathlib import Path
-from typing import Callable, Optional
 
 import yt_dlp
-
 
 # ──────────────────────────────────────────────
 # State enums
@@ -40,9 +39,9 @@ class DownloadState(Enum):
 @dataclass
 class DownloadPreferences:
     extract_audio: bool = False
-    audio_format: str = "mp3"          # mp3 | m4a | opus | flac | wav | best
+    audio_format: str = "mp3"  # mp3 | m4a | opus | flac | wav | best
     video_format: str = "bestvideo+bestaudio/best"
-    video_quality: str = "best"        # best | 2160 | 1440 | 1080 | 720 | 480 | 360
+    video_quality: str = "best"  # best | 2160 | 1440 | 1080 | 720 | 480 | 360
     embed_metadata: bool = True
     embed_thumbnail: bool = True
     embed_subtitles: bool = False
@@ -53,7 +52,7 @@ class DownloadPreferences:
     playlist_subdir: bool = True
     restrict_filenames: bool = False
     proxy: str = ""
-    rate_limit: str = ""               # e.g. "1M"
+    rate_limit: str = ""  # e.g. "1M"
     concurrent_fragments: int = 4
     use_aria2c: bool = False
     cookies_file: str = ""
@@ -64,7 +63,7 @@ class DownloadPreferences:
 class VideoInfo:
     title: str = ""
     uploader: str = ""
-    duration: int = 0          # seconds
+    duration: int = 0  # seconds
     thumbnail: str = ""
     url: str = ""
     ext: str = ""
@@ -80,7 +79,7 @@ class DownloadTask:
     url: str = ""
     title: str = "Unknown"
     state: DownloadState = DownloadState.IDLE
-    progress: float = 0.0          # 0.0 – 1.0
+    progress: float = 0.0  # 0.0 – 1.0
     speed: str = ""
     eta: str = ""
     size: str = ""
@@ -97,7 +96,7 @@ class DownloadTask:
 # ──────────────────────────────────────────────
 
 
-def _fmt_bytes(n: Optional[int]) -> str:
+def _fmt_bytes(n: int | None) -> str:
     if n is None:
         return ""
     for unit in ("B", "KB", "MB", "GB", "TB"):
@@ -107,13 +106,13 @@ def _fmt_bytes(n: Optional[int]) -> str:
     return str(n)
 
 
-def _fmt_speed(bps: Optional[float]) -> str:
+def _fmt_speed(bps: float | None) -> str:
     if bps is None:
         return ""
     return _fmt_bytes(int(bps)) + "/s"
 
 
-def _fmt_eta(seconds: Optional[int]) -> str:
+def _fmt_eta(seconds: int | None) -> str:
     if seconds is None:
         return ""
     m, s = divmod(int(seconds), 60)
@@ -147,7 +146,7 @@ class Downloader:
 
     # ── Public API ────────────────────────────
 
-    def fetch_info(self, url: str, prefs: DownloadPreferences) -> Optional[VideoInfo]:
+    def fetch_info(self, url: str, prefs: DownloadPreferences) -> VideoInfo | None:
         """Synchronously fetch video/playlist metadata (runs in caller's thread)."""
         ydl_opts = self._base_opts(prefs, quiet=True)
         ydl_opts.update(
@@ -179,12 +178,10 @@ class Downloader:
                     playlist_count=len(entries) if is_pl else 1,
                     formats=first.get("formats") or [],
                 )
-        except Exception as exc:  # noqa: BLE001
+        except Exception:  # noqa: BLE001
             return None
 
-    def start_download(
-        self, url: str, prefs: DownloadPreferences
-    ) -> str:
+    def start_download(self, url: str, prefs: DownloadPreferences) -> str:
         """Enqueue a download and return its task_id."""
         task = DownloadTask(url=url, is_audio=prefs.extract_audio)
         cancel_ev = threading.Event()
@@ -282,9 +279,7 @@ class Downloader:
             task.error = str(exc)
             self._update_task(task)
 
-    def _progress_hook(
-        self, task: DownloadTask, cancel_ev: threading.Event
-    ) -> Callable:
+    def _progress_hook(self, task: DownloadTask, cancel_ev: threading.Event) -> Callable:
         def hook(d: dict) -> None:
             status = d.get("status")
             if cancel_ev.is_set():
@@ -322,6 +317,7 @@ class Downloader:
             if d.get("status") == "finished":
                 task.output_path = d.get("info_dict", {}).get("filepath") or task.output_path
                 self._update_task(task)
+
         return hook
 
     def _playlist_hook(self, task: DownloadTask) -> Callable:
@@ -333,6 +329,7 @@ class Downloader:
             if count:
                 task.playlist_count = count
             self._update_task(task)
+
         return hook
 
     def _base_opts(self, prefs: DownloadPreferences, quiet: bool = False) -> dict:
@@ -356,9 +353,7 @@ class Downloader:
 
         if prefs.playlist_subdir:
             outtmpl = str(
-                Path(out_dir)
-                / "%(playlist_title,title|Unknown)s"
-                / prefs.output_template
+                Path(out_dir) / "%(playlist_title,title|Unknown)s" / prefs.output_template
             )
         else:
             outtmpl = str(Path(out_dir) / prefs.output_template)
@@ -403,14 +398,10 @@ class Downloader:
             opts["merge_output_format"] = "mkv"
             if prefs.embed_metadata:
                 opts.setdefault("postprocessors", [])
-                opts["postprocessors"].append(
-                    {"key": "FFmpegMetadata", "add_metadata": True}
-                )
+                opts["postprocessors"].append({"key": "FFmpegMetadata", "add_metadata": True})
             if prefs.embed_subtitles:
                 opts["writesubtitles"] = True
-                opts["subtitleslangs"] = [
-                    s.strip() for s in prefs.subtitle_languages.split(",")
-                ]
+                opts["subtitleslangs"] = [s.strip() for s in prefs.subtitle_languages.split(",")]
                 opts.setdefault("postprocessors", [])
                 opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle"})
 

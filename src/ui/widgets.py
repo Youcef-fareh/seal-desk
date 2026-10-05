@@ -6,13 +6,12 @@ Reusable styled components built on top of tkinter.
 from __future__ import annotations
 
 import tkinter as tk
-from tkinter import ttk
-from typing import Any, Callable, Optional
+from collections.abc import Callable
+from typing import Any
 
-from .theme import FONTS, PALETTE, RADIUS, SPACING
+from .theme import FONTS, PALETTE, SPACING
 
-
-P = PALETTE   # shorthand
+P = PALETTE  # shorthand
 
 
 # ──────────────────────────────────────────────
@@ -52,17 +51,17 @@ class SealButton(tk.Frame):
         parent: tk.Widget,
         text: str = "",
         command: Callable = None,
-        variant: str = "primary",   # primary | secondary | danger | ghost
+        variant: str = "primary",  # primary | secondary | danger | ghost
         icon: str = "",
         width: int = 0,
         height: int = 36,
         **kwargs: Any,
     ) -> None:
         colors = {
-            "primary":   (P["btn_primary"],   P["btn_primary_hover"],   P["text_primary"]),
-            "secondary": (P["btn_secondary"],  P["btn_secondary_hover"], P["text_primary"]),
-            "danger":    (P["btn_danger"],     P["btn_danger_hover"],    P["text_primary"]),
-            "ghost":     ("",                  P["bg_3"],                P["text_secondary"]),
+            "primary": (P["btn_primary"], P["btn_primary_hover"], P["text_primary"]),
+            "secondary": (P["btn_secondary"], P["btn_secondary_hover"], P["text_primary"]),
+            "danger": (P["btn_danger"], P["btn_danger_hover"], P["text_primary"]),
+            "ghost": ("", P["bg_3"], P["text_secondary"]),
         }
         self._bg, self._hover_bg, self._fg = colors.get(variant, colors["primary"])
         self._command = command
@@ -155,11 +154,7 @@ class SealEntry(tk.Frame):
             bd=0,
             font=FONTS["body"],
             show=show,
-            **{
-                k: v
-                for k, v in kwargs.items()
-                if k not in ("bg", "fg", "font", "relief", "bd")
-            },
+            **{k: v for k, v in kwargs.items() if k not in ("bg", "fg", "font", "relief", "bd")},
         )
         self._entry.pack(fill="both", expand=True, padx=SPACING["sm"], pady=6)
 
@@ -254,15 +249,53 @@ class SealProgressBar(tk.Canvas):
             self.create_rounded_rect(0, 0, fill_w, h, r, fill=P["progress_fill"])
 
     def create_rounded_rect(
-        self,
-        x1: int, y1: int, x2: int, y2: int,
-        radius: int, **kwargs: Any
+        self, x1: int, y1: int, x2: int, y2: int, radius: int, **kwargs: Any
     ) -> None:
         r = radius
-        self.create_arc(x1, y1, x1 + 2*r, y1 + 2*r, start=90,  extent=90,  style="pieslice", outline="", **kwargs)
-        self.create_arc(x2 - 2*r, y1, x2, y1 + 2*r, start=0,   extent=90,  style="pieslice", outline="", **kwargs)
-        self.create_arc(x1, y2 - 2*r, x1 + 2*r, y2, start=180, extent=90,  style="pieslice", outline="", **kwargs)
-        self.create_arc(x2 - 2*r, y2 - 2*r, x2, y2, start=270, extent=90,  style="pieslice", outline="", **kwargs)
+        self.create_arc(
+            x1,
+            y1,
+            x1 + 2 * r,
+            y1 + 2 * r,
+            start=90,
+            extent=90,
+            style="pieslice",
+            outline="",
+            **kwargs,
+        )
+        self.create_arc(
+            x2 - 2 * r,
+            y1,
+            x2,
+            y1 + 2 * r,
+            start=0,
+            extent=90,
+            style="pieslice",
+            outline="",
+            **kwargs,
+        )
+        self.create_arc(
+            x1,
+            y2 - 2 * r,
+            x1 + 2 * r,
+            y2,
+            start=180,
+            extent=90,
+            style="pieslice",
+            outline="",
+            **kwargs,
+        )
+        self.create_arc(
+            x2 - 2 * r,
+            y2 - 2 * r,
+            x2,
+            y2,
+            start=270,
+            extent=90,
+            style="pieslice",
+            outline="",
+            **kwargs,
+        )
         self.create_rectangle(x1 + r, y1, x2 - r, y2, outline="", **kwargs)
         self.create_rectangle(x1, y1 + r, x2, y2 - r, outline="", **kwargs)
 
@@ -294,7 +327,7 @@ class SealLabel(tk.Label):
         self,
         parent: tk.Widget,
         text: str = "",
-        style: str = "body",       # display | heading1..3 | body | body_sm | caption | mono
+        style: str = "body",  # display | heading1..3 | body | body_sm | caption | mono
         color: str = "text_primary",
         **kwargs: Any,
     ) -> None:
@@ -348,19 +381,29 @@ class SealSwitch(tk.Canvas):
         self.delete("all")
         on = self._var.get()
         track_color = P["accent"] if on else P["bg_3"]
-        knob_x = (self.WIDTH - self.PADDING - self.HEIGHT // 2) if on else (self.PADDING + self.HEIGHT // 2)
+        knob_x = (
+            (self.WIDTH - self.PADDING - self.HEIGHT // 2)
+            if on
+            else (self.PADDING + self.HEIGHT // 2)
+        )
         r_track = self.HEIGHT // 2
 
         # Track
         self.create_oval(0, 0, self.HEIGHT, self.HEIGHT, fill=track_color, outline="")
-        self.create_oval(self.WIDTH - self.HEIGHT, 0, self.WIDTH, self.HEIGHT, fill=track_color, outline="")
-        self.create_rectangle(r_track, 0, self.WIDTH - r_track, self.HEIGHT, fill=track_color, outline="")
+        self.create_oval(
+            self.WIDTH - self.HEIGHT, 0, self.WIDTH, self.HEIGHT, fill=track_color, outline=""
+        )
+        self.create_rectangle(
+            r_track, 0, self.WIDTH - r_track, self.HEIGHT, fill=track_color, outline=""
+        )
 
         # Knob
         r_knob = self.HEIGHT // 2 - self.PADDING
         self.create_oval(
-            knob_x - r_knob, self.PADDING,
-            knob_x + r_knob, self.HEIGHT - self.PADDING,
+            knob_x - r_knob,
+            self.PADDING,
+            knob_x + r_knob,
+            self.HEIGHT - self.PADDING,
             fill="white",
             outline="",
         )
