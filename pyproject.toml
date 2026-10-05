@@ -1,0 +1,61 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.backends.legacy:build"
+
+[project]
+name = "seal-desktop"
+version = "1.0.0"
+description = "Cross-platform video & audio downloader powered by yt-dlp"
+readme = "README.md"
+license = { text = "GPL-3.0" }
+requires-python = ">=3.11"
+dependencies = [
+    "yt-dlp>=2024.11.04",
+    "requests>=2.31.0",
+    "platformdirs>=4.1.0",
+    "Pillow>=10.2.0",
+]
+
+[project.scripts]
+seal-desktop = "main:main"
+
+[project.urls]
+Homepage = "https://github.com/your-username/seal-desktop"
+Repository = "https://github.com/your-username/seal-desktop"
+
+# ──────────────────────────────────────────────
+# Ruff (linter + formatter)
+# ──────────────────────────────────────────────
+[tool.ruff]
+target-version = "py311"
+line-length = 100
+src = ["src", "tests"]
+
+[tool.ruff.lint]
+select = [
+    "E",   # pycodestyle
+    "F",   # pyflakes
+    "I",   # isort
+    "B",   # bugbear
+    "UP",  # pyupgrade
+    "N",   # pep8-naming
+]
+ignore = [
+    "E501",   # line too long (handled by formatter)
+    "B008",   # function calls in defaults
+    "N802",   # function names
+    "N806",   # variable names in functions
+]
+
+[tool.ruff.lint.isort]
+known-first-party = ["src"]
+
+# ──────────────────────────────────────────────
+# Pytest
+# ──────────────────────────────────────────────
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+python_files = ["test_*.py"]
+python_classes = ["Test*"]
+python_functions = ["test_*"]
+addopts = "-v --tb=short"

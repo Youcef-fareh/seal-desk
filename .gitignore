@@ -1,0 +1,46 @@
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+*.egg
+*.egg-info/
+dist/
+build/
+.eggs/
+.env
+.venv
+env/
+venv/
+*.log
+
+# PyInstaller
+*.spec.bak
+dist/
+build/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+.DS_Store
+Thumbs.db
+
+# App config (user-specific)
+*.json
+
+# Test
+.pytest_cache/
+.coverage
+htmlcov/
+.mypy_cache/
+.ruff_cache/
+
+# Assets (generated)
+assets/icon_tmp.png
+AppDir/
+appimagetool
+
+# Installer artifacts
+installer/*.exe

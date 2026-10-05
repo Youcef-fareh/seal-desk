@@ -1,0 +1,332 @@
+name: Build & Release Seal Desktop
+
+on:
+  push:
+    tags:
+      - "v*.*.*"          # triggers on v1.0.0, v1.2.3, etc.
+  workflow_dispatch:       # manual trigger from GitHub UI
+    inputs:
+      version:
+        description: "Version tag (e.g. v1.0.0)"
+        required: false
+        default: "v0.0.0-dev"
+
+# ─────────────────────────────────────────────────────────────────────────────
+# Permissions needed to create a GitHub Release
+# ─────────────────────────────────────────────────────────────────────────────
+permissions:
+  contents: write
+
+env:
+  PYTHON_VERSION: "3.12"
+  APP_NAME: "SealDesktop"
+
+jobs:
+  # ───────────────────────────────────────────────────────────────────────────
+  # 1. Build for Windows (exe + NSIS installer)
+  # ───────────────────────────────────────────────────────────────────────────
+  build-windows:
+    name: Build Windows
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Create placeholder icon (if missing)
+        shell: python
+        run: |
+          from pathlib import Path
+          Path("assets").mkdir(exist_ok=True)
+          ico = Path("assets/icon.ico")
+          if not ico.exists():
+              # Create a minimal valid 16x16 ICO using Pillow
+              from PIL import Image, ImageDraw
+              img = Image.new("RGBA", (256, 256), (139, 92, 246, 255))
+              d = ImageDraw.Draw(img)
+              d.text((80, 90), "🦭", fill=(255,255,255,255))
+              img.save(str(ico), format="ICO", sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])
+              print("Created placeholder icon.")
+
+      - name: Build with PyInstaller
+        run: pyinstaller SealDesktop.spec --clean --noconfirm
+
+      - name: Verify build output
+        run: |
+          if (Test-Path "dist\SealDesktop\SealDesktop.exe") {
+            Write-Host "Build succeeded: SealDesktop.exe found"
+          } else {
+            Write-Host "ERROR: SealDesktop.exe not found!" -ForegroundColor Red
+            exit 1
+          }
+
+      - name: Create ZIP archive
+        run: |
+          $version = "${{ github.ref_name }}"
+          if (-not $version) { $version = "dev" }
+          Compress-Archive -Path "dist\SealDesktop\*" -DestinationPath "dist\${{ env.APP_NAME }}-$version-windows-x64.zip"
+
+      - name: Install NSIS
+        run: |
+          choco install nsis --yes --no-progress
+
+      - name: Build NSIS installer
+        run: |
+          $version = "${{ github.ref_name }}"
+          if (-not $version) { $version = "dev" }
+          # Update version in NSI script
+          (Get-Content installer\windows.nsi) -replace '1\.0\.0', $version.TrimStart('v') | Set-Content installer\windows.nsi
+          makensis installer\windows.nsi
+        continue-on-error: true   # Don't fail if NSIS fails (icon may be missing)
+
+      - name: Upload Windows build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-build
+          path: |
+            dist/${{ env.APP_NAME }}-*-windows-x64.zip
+            dist/${{ env.APP_NAME }}-*-Setup.exe
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 2. Build for macOS (universal .app + DMG)
+  # ───────────────────────────────────────────────────────────────────────────
+  build-macos:
+    name: Build macOS
+    runs-on: macos-latest
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Create placeholder icon (if missing)
+        run: |
+          python - <<'EOF'
+          from pathlib import Path
+          Path("assets").mkdir(exist_ok=True)
+          ico = Path("assets/icon.icns")
+          if not ico.exists():
+              try:
+                  from PIL import Image
+                  img = Image.new("RGBA", (512, 512), (139, 92, 246, 255))
+                  img.save("assets/icon_tmp.png")
+                  import subprocess
+                  subprocess.run(["iconutil", "-c", "icns", "--output", str(ico), "assets/icon_tmp.png"], check=False)
+              except Exception as e:
+                  print(f"Could not create icon: {e}")
+          EOF
+
+      - name: Build with PyInstaller
+        run: pyinstaller SealDesktop.spec --clean --noconfirm
+
+      - name: Create DMG
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION:-dev}"
+          hdiutil create \
+            -volname "${{ env.APP_NAME }}" \
+            -srcfolder "dist/SealDesktop.app" \
+            -ov -format UDZO \
+            "dist/${{ env.APP_NAME }}-${VERSION}-macos.dmg" || \
+          # Fallback: ZIP if DMG creation fails
+          zip -r "dist/${{ env.APP_NAME }}-${VERSION}-macos.zip" "dist/SealDesktop.app"
+
+      - name: Upload macOS build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: macos-build
+          path: |
+            dist/${{ env.APP_NAME }}-*-macos.dmg
+            dist/${{ env.APP_NAME }}-*-macos.zip
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 3. Build for Linux (AppImage + tar.gz)
+  # ───────────────────────────────────────────────────────────────────────────
+  build-linux:
+    name: Build Linux
+    runs-on: ubuntu-22.04
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Install system dependencies
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            python3-tk \
+            tk-dev \
+            libglib2.0-0 \
+            libgtk-3-0 \
+            libx11-6 \
+            fuse \
+            libfuse2
+
+      - name: Set up Python ${{ env.PYTHON_VERSION }}
+        uses: actions/setup-python@v5
+        with:
+          python-version: ${{ env.PYTHON_VERSION }}
+          cache: pip
+
+      - name: Install Python dependencies
+        run: |
+          python -m pip install --upgrade pip
+          pip install -r requirements.txt
+          pip install pyinstaller
+
+      - name: Build with PyInstaller
+        run: pyinstaller SealDesktop.spec --clean --noconfirm
+
+      - name: Create tar.gz archive
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION:-dev}"
+          tar -czf "dist/${{ env.APP_NAME }}-${VERSION}-linux-x64.tar.gz" \
+            -C dist SealDesktop
+
+      - name: Build AppImage
+        run: |
+          VERSION="${{ github.ref_name }}"
+          VERSION="${VERSION:-dev}"
+          
+          # Download appimagetool
+          wget -q "https://github.com/AppImage/AppImageKit/releases/download/continuous/appimagetool-x86_64.AppImage" \
+            -O appimagetool
+          chmod +x appimagetool
+          
+          # Build AppDir structure
+          mkdir -p AppDir/usr/bin AppDir/usr/share/applications AppDir/usr/share/icons/hicolor/256x256/apps
+          cp -r dist/SealDesktop/* AppDir/usr/bin/
+          
+          cat > AppDir/usr/share/applications/seal-desktop.desktop << 'EOF'
+          [Desktop Entry]
+          Name=Seal Desktop
+          Exec=SealDesktop
+          Icon=seal-desktop
+          Type=Application
+          Categories=Network;AudioVideo;
+          Comment=Video & Audio downloader powered by yt-dlp
+          EOF
+          
+          # Copy AppRun
+          cat > AppDir/AppRun << 'APPRUN'
+          #!/bin/bash
+          HERE="$(dirname "$(readlink -f "${0}")")"
+          exec "$HERE/usr/bin/SealDesktop" "$@"
+          APPRUN
+          chmod +x AppDir/AppRun
+          
+          # Use FUSE-less mode for CI
+          ./appimagetool --appimage-extract-and-run AppDir \
+            "dist/${{ env.APP_NAME }}-${VERSION}-linux-x86_64.AppImage" || true
+        continue-on-error: true
+
+      - name: Upload Linux build artifacts
+        uses: actions/upload-artifact@v4
+        with:
+          name: linux-build
+          path: |
+            dist/${{ env.APP_NAME }}-*-linux-*.tar.gz
+            dist/${{ env.APP_NAME }}-*-linux-*.AppImage
+          if-no-files-found: warn
+          retention-days: 30
+
+  # ───────────────────────────────────────────────────────────────────────────
+  # 4. Create GitHub Release (only on version tags)
+  # ───────────────────────────────────────────────────────────────────────────
+  release:
+    name: Publish Release
+    needs: [build-windows, build-macos, build-linux]
+    runs-on: ubuntu-latest
+    if: startsWith(github.ref, 'refs/tags/v')
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+
+      - name: Download all artifacts
+        uses: actions/download-artifact@v4
+        with:
+          path: release-artifacts
+          merge-multiple: true
+
+      - name: List artifacts
+        run: find release-artifacts -type f | sort
+
+      - name: Extract version
+        id: version
+        run: echo "tag=${GITHUB_REF_NAME}" >> $GITHUB_OUTPUT
+
+      - name: Create GitHub Release
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: ${{ steps.version.outputs.tag }}
+          name: "Seal Desktop ${{ steps.version.outputs.tag }}"
+          draft: false
+          prerelease: ${{ contains(github.ref_name, 'alpha') || contains(github.ref_name, 'beta') || contains(github.ref_name, 'rc') }}
+          generate_release_notes: true
+          body: |
+            ## Seal Desktop ${{ steps.version.outputs.tag }}
+            
+            A powerful cross-platform video & audio downloader powered by yt-dlp.
+            
+            ### 📦 Downloads
+            
+            | Platform | File | Notes |
+            |----------|------|-------|
+            | 🪟 Windows | `SealDesktop-*-Setup.exe` | Installer (recommended) |
+            | 🪟 Windows | `SealDesktop-*-windows-x64.zip` | Portable ZIP |
+            | 🍎 macOS | `SealDesktop-*-macos.dmg` | Disk image |
+            | 🐧 Linux | `SealDesktop-*-linux-x86_64.AppImage` | AppImage (portable) |
+            | 🐧 Linux | `SealDesktop-*-linux-x64.tar.gz` | Tarball |
+            
+            ### ✨ Features
+            - Download video & audio from 1000+ sites via yt-dlp
+            - Audio extraction (MP3, M4A, OPUS, FLAC, WAV)
+            - Video quality selection (4K, 1080p, 720p…)
+            - Playlist download with subdirectory support
+            - Metadata & thumbnail embedding
+            - Subtitle embedding
+            - Download history with search
+            - Proxy & rate-limit support
+            - aria2c external downloader support
+            
+            ### ⚠️ Requirements
+            - **Windows 10/11** (x64)
+            - **macOS 12+** (Apple Silicon or Intel)  
+            - **Linux** (x86_64, glibc 2.31+)
+            - **FFmpeg** must be installed separately for audio extraction and merging
+            
+            > Get FFmpeg: https://ffmpeg.org/download.html
+            
+          files: release-artifacts/**/*
+          fail_on_unmatched_files: false
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}

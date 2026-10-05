@@ -1,0 +1,5 @@
+# Seal Desktop Python requirements
+yt-dlp>=2024.11.04
+requests>=2.31.0
+platformdirs>=4.1.0
+Pillow>=10.2.0
