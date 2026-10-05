@@ -1,6 +1,9 @@
 """
 Seal Desktop - FFmpeg Utility & Downloader
 Ensures audio and video are properly merged by detecting or auto-installing FFmpeg.
+
+FFmpeg is bundled with the app via the `imageio-ffmpeg` package, which ships
+prebuilt binaries for Windows, macOS, and Linux. No user action required.
 """
 
 from __future__ import annotations
@@ -21,6 +24,7 @@ APP_NAME = "SealDesktop"
 APP_AUTHOR = "SealDesktop"
 
 # Official standalone FFmpeg build zip for Windows x64 (yt-dlp curated builds)
+# Used as a fallback when the bundled imageio-ffmpeg binary is unavailable.
 WIN64_FFMPEG_URL = "https://github.com/yt-dlp/FFmpeg-Builds/releases/download/latest/ffmpeg-master-latest-win64-gpl.zip"
 
 
@@ -31,23 +35,44 @@ def get_local_bin_dir() -> Path:
     return bin_dir
 
 
+def _get_bundled_ffmpeg() -> str | None:
+    """Return the FFmpeg binary bundled via imageio-ffmpeg, if available."""
+    try:
+        import imageio_ffmpeg  # noqa: PLC0415
+        path = imageio_ffmpeg.get_ffmpeg_exe()
+        if path and os.path.isfile(path) and os.access(path, os.X_OK):
+            return path
+    except Exception:  # noqa: BLE001
+        pass
+    return None
+
+
 def get_ffmpeg_path() -> str | None:
-    """Find ffmpeg in custom local app directory or system PATH."""
+    """Find ffmpeg – checks bundled binary first, then local/system locations."""
+
+    # 1. Bundled binary (imageio-ffmpeg) — always available in the packaged app
+    bundled = _get_bundled_ffmpeg()
+    if bundled:
+        return bundled
+
     exe_name = "ffmpeg.exe" if sys.platform == "win32" else "ffmpeg"
+
+    # 2. User-downloaded binary in local app-data dir
     local_path = get_local_bin_dir() / exe_name
     if local_path.is_file() and os.access(local_path, os.X_OK):
         return str(local_path)
 
-    # Check project-relative bin folder if present
+    # 3. Project-relative bin folder (dev-mode convenience)
     proj_bin = Path(__file__).resolve().parent.parent.parent / "bin" / exe_name
     if proj_bin.is_file() and os.access(proj_bin, os.X_OK):
         return str(proj_bin)
 
+    # 4. System PATH
     system_path = shutil.which("ffmpeg")
     if system_path:
         return system_path
 
-    # Common Windows install locations
+    # 5. Common Windows install locations
     if sys.platform == "win32":
         for candidate in (
             Path("C:/ffmpeg/bin/ffmpeg.exe"),
@@ -70,6 +95,7 @@ def download_ffmpeg_async(
 ) -> None:
     """
     Downloads static FFmpeg binary for Windows x64 and extracts to local bin dir.
+    Only needed as a fallback when the bundled imageio-ffmpeg binary is missing.
     Calls progress_callback(fraction, message) and done_callback(success, message).
     """
 

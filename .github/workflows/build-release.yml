@@ -79,11 +79,12 @@ jobs:
           Compress-Archive -Path "dist\SealDesktop\*" -DestinationPath "dist\${{ env.APP_NAME }}-$version-windows-x64.zip"
 
       - name: Install NSIS
-        run: |
-          choco install nsis --yes --no-progress
+        run: choco install nsis --yes --no-progress
 
       - name: Build NSIS installer
         run: |
+          # Refresh PATH so makensis is found after choco install
+          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
           $version = "${{ github.ref_name }}"
           if (-not $version) { $version = "dev" }
           # Update version in NSI script
@@ -317,14 +318,14 @@ jobs:
             - Download history with search
             - Proxy & rate-limit support
             - aria2c external downloader support
+            - **FFmpeg bundled** — no separate installation required
             
-            ### ⚠️ Requirements
+            ### ✅ Requirements
             - **Windows 10/11** (x64)
-            - **macOS 12+** (Apple Silicon or Intel)  
+            - **macOS 12+** (Apple Silicon or Intel)
             - **Linux** (x86_64, glibc 2.31+)
-            - **FFmpeg** must be installed separately for audio extraction and merging
             
-            > Get FFmpeg: https://ffmpeg.org/download.html
+            > FFmpeg is included in the app — just download and run!
             
           files: release-artifacts/**/*
           fail_on_unmatched_files: false

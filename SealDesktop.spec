@@ -7,16 +7,22 @@ Produces a single-directory bundle for Windows/macOS/Linux.
 import sys
 from pathlib import Path
 
+try:
+    from PyInstaller.utils.hooks import collect_all
+    datas_imageio, binaries_imageio, hiddenimports_imageio = collect_all("imageio_ffmpeg")
+except Exception:
+    datas_imageio, binaries_imageio, hiddenimports_imageio = [], [], []
+
 block_cipher = None
 
 a = Analysis(
     ["main.py"],
     pathex=["."],
-    binaries=[],
+    binaries=binaries_imageio,
     datas=[
         ("assets", "assets"),
         ("src", "src"),
-    ],
+    ] + datas_imageio,
     hiddenimports=[
         "yt_dlp",
         "yt_dlp.extractor",
@@ -30,7 +36,7 @@ a = Analysis(
         "tkinter.ttk",
         "tkinter.filedialog",
         "tkinter.messagebox",
-    ],
+    ] + hiddenimports_imageio,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
