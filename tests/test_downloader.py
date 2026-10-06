@@ -53,6 +53,7 @@ def test_download_preferences_defaults():
     assert prefs.audio_format == "mp3"
     assert prefs.video_quality == "best"
     assert prefs.video_container == "mp4"
+    assert prefs.video_codec == "h264"
     assert prefs.embed_metadata is True
     assert prefs.concurrent_fragments == 4
 
@@ -174,6 +175,7 @@ def test_updater_version_check():
     assert _parse_version_tuple("1.0.0") == (1, 0, 0)
     assert _parse_version_tuple("v2.0-beta") == (2, 0)
 
+    assert is_newer_version("1.2.1", "1.2.0") is True
     assert is_newer_version("1.2.0", "1.1.0") is True
     assert is_newer_version("v2.0.0", "1.1.0") is True
     assert is_newer_version("1.1.0", "1.1.0") is False
@@ -226,3 +228,33 @@ def test_settings_clear_history():
     s._data["history"] = [{"url": "x"}]
     s.clear_history()
     assert s.get_history() == []
+
+
+def test_video_codec_opts():
+    import threading
+
+    dl = Downloader()
+    task = DownloadTask()
+    cancel_ev = threading.Event()
+    pause_ev = threading.Event()
+
+    # Default h264 produces format_sort prioritizing h264 video and m4a/aac audio
+    prefs_h264 = DownloadPreferences(video_codec="h264")
+    opts_h264 = dl._build_opts(task, prefs_h264, cancel_ev, pause_ev)
+    assert opts_h264.get("format_sort") == ["vcodec:h264", "acodec:m4a"]
+
+    # vp9
+    prefs_vp9 = DownloadPreferences(video_codec="vp9")
+    opts_vp9 = dl._build_opts(task, prefs_vp9, cancel_ev, pause_ev)
+    assert opts_vp9.get("format_sort") == ["vcodec:vp9"]
+
+    # av1
+    prefs_av1 = DownloadPreferences(video_codec="av1")
+    opts_av1 = dl._build_opts(task, prefs_av1, cancel_ev, pause_ev)
+    assert opts_av1.get("format_sort") == ["vcodec:av01"]
+
+    # auto (no format_sort override)
+    prefs_auto = DownloadPreferences(video_codec="auto")
+    opts_auto = dl._build_opts(task, prefs_auto, cancel_ev, pause_ev)
+    assert "format_sort" not in opts_auto
+

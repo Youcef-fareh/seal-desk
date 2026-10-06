@@ -47,6 +47,7 @@ class DownloadPreferences:
     video_format: str = "bestvideo+bestaudio/best"
     video_quality: str = "best"  # best | 2160 | 1440 | 1080 | 720 | 480 | 360
     video_container: str = "mp4"  # mp4 | mkv
+    video_codec: str = "h264"  # h264 | auto | vp9 | av1
     embed_metadata: bool = True
     embed_thumbnail: bool = True
     embed_subtitles: bool = False
@@ -585,6 +586,19 @@ class Downloader:
                     fmt = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]"
                 opts["format"] = fmt
                 opts["merge_output_format"] = container
+
+                # Codec compatibility preference:
+                # By default, yt-dlp prefers AV1 (av01), which causes playback errors
+                # ("Pas de module de décodage approprié pour le format: av01")
+                # on older VLC builds and systems without AV1 decoders.
+                # 'h264' ensures broad playback compatibility across all devices and players.
+                if prefs.video_codec == "h264":
+                    opts["format_sort"] = ["vcodec:h264", "acodec:m4a"]
+                elif prefs.video_codec == "vp9":
+                    opts["format_sort"] = ["vcodec:vp9"]
+                elif prefs.video_codec == "av1":
+                    opts["format_sort"] = ["vcodec:av01"]
+
                 if prefs.embed_metadata:
                     opts.setdefault("postprocessors", [])
                     opts["postprocessors"].append({"key": "FFmpegMetadata", "add_metadata": True})
@@ -605,6 +619,8 @@ class Downloader:
                     h = prefs.video_quality
                     fmt = f"best[height<={h}][ext=mp4]/best[height<={h}]/best"
                 opts["format"] = fmt
+                if prefs.video_codec == "h264":
+                    opts["format_sort"] = ["vcodec:h264", "acodec:m4a"]
 
         if prefs.restrict_filenames:
             opts["restrictfilenames"] = True

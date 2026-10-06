@@ -34,6 +34,7 @@ DEFAULTS: dict[str, Any] = {
     "audio_format": "mp3",
     "video_quality": "best",
     "video_container": "mp4",  # "mp4" | "mkv"
+    "video_codec": "h264",  # "h264" | "auto" | "vp9" | "av1"
     "auto_merge": True,
     # Post-processing
     "embed_metadata": True,

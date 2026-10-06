@@ -272,6 +272,14 @@ class SettingsPage(tk.Frame):
         )
         self._trans_labels.append((lbl_vc, "label_video_container"))
 
+        _, lbl_vcodec, _ = _dropdown_row(
+            sec_fmt,
+            t("label_video_codec"),
+            "video_codec",
+            ["h264", "auto", "vp9", "av1"],
+        )
+        self._trans_labels.append((lbl_vcodec, "label_video_codec"))
+
         # ── 4. FFmpeg Engine (Audio/Video Merger) ───
         sec_ff_lbl, sec_ff = _section(inner, t("sec_ffmpeg"))
         self._trans_labels.append((sec_ff_lbl, "sec_ffmpeg"))

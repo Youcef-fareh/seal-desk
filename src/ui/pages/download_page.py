@@ -252,6 +252,7 @@ class DownloadPage(tk.Frame):
             audio_format=s.get("audio_format"),
             video_quality=s.get("video_quality"),
             video_container=s.get("video_container", "mp4"),
+            video_codec=s.get("video_codec", "h264"),
             embed_metadata=s.get("embed_metadata"),
             embed_thumbnail=s.get("embed_thumbnail"),
             embed_subtitles=s.get("embed_subtitles"),
@@ -340,6 +341,18 @@ class DownloadPage(tk.Frame):
         self._q_menu = tk.OptionMenu(opts_row, self._quality_var, *quality_opts)
         self._style_menu(self._q_menu)
         self._q_menu.pack(side="left")
+
+        # Codec dropdown (avoids unsupported formats like av01)
+        self._codec_lbl = SealLabel(
+            opts_row, t("video_codec"), style="body", color="text_secondary", bg=P["bg_1"]
+        )
+        self._codec_lbl.pack(side="left", padx=(SPACING["md"], SPACING["xs"]))
+
+        self._codec_var = tk.StringVar(value=settings.get("video_codec", "h264"))
+        codec_opts = ["h264", "auto", "vp9", "av1"]
+        self._c_menu = tk.OptionMenu(opts_row, self._codec_var, *codec_opts)
+        self._style_menu(self._c_menu)
+        self._c_menu.pack(side="left")
 
         # Audio format dropdown
         self._format_lbl = SealLabel(
@@ -515,6 +528,7 @@ class DownloadPage(tk.Frame):
         prefs.extract_audio = self._audio_var.get()
         prefs.audio_format = self._audio_fmt_var.get()
         prefs.video_quality = self._quality_var.get()
+        prefs.video_codec = self._codec_var.get()
         return prefs
 
     def _queue_item(self) -> None:
@@ -655,6 +669,7 @@ class DownloadPage(tk.Frame):
         self._dl_btn.configure_text(t("btn_download_now"))
         self._audio_lbl.configure_text(t("audio_only"))
         self._quality_lbl.configure_text(t("video_quality"))
+        self._codec_lbl.configure_text(t("video_codec"))
         self._format_lbl.configure_text(t("audio_format"))
         self._out_btn.configure_text(f"📁  {t('output_folder')}")
         self._list_title.configure_text(t("downloads_header"))
