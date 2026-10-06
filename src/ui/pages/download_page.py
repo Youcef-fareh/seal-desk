@@ -165,13 +165,29 @@ class DownloadCard(SealCard):
         self._state_lbl.configure(text=label, fg=color)
 
         stats = ""
-        if task.speed:
-            stats += f"{task.speed}  "
-        if task.size:
-            stats += f"{task.size}  "
-        if task.eta:
-            stats += f"ETA {task.eta}"
+        if task.state in (DownloadState.QUEUED, DownloadState.PAUSED) and not task.speed:
+            parts = []
+            if task.quality_label:
+                parts.append(task.quality_label)
+            if task.estimated_size or task.size:
+                parts.append(task.estimated_size or task.size)
+            if task.duration_str:
+                parts.append(task.duration_str)
+            stats = " · ".join(parts)
+        else:
+            if task.speed:
+                stats += f"{task.speed}  "
+            if task.size:
+                stats += f"{task.size}  "
+            if task.eta:
+                stats += f"ETA {task.eta}"
         self._stats_lbl.configure(text=stats.strip())
+
+        if task.uploader:
+            url_display = f"👤 {task.uploader} · {task.url[:70]}"
+        else:
+            url_display = task.url[:85] + ("…" if len(task.url) > 85 else "")
+        self._url_lbl.configure(text=url_display)
 
         self._pbar.set_progress(task.progress)
 

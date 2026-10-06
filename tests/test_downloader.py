@@ -258,3 +258,45 @@ def test_video_codec_opts():
     opts_auto = dl._build_opts(task, prefs_auto, cancel_ev, pause_ev)
     assert "format_sort" not in opts_auto
 
+
+def test_prefetch_task_info(monkeypatch):
+    dl = Downloader()
+    prefs = DownloadPreferences(video_codec="h264", video_quality="1080")
+    task = DownloadTask(url="https://example.com/test", prefs=prefs, state=DownloadState.QUEUED)
+    dl._tasks[task.task_id] = task
+
+    fake_info = {
+        "title": "Awesome Sample Video",
+        "uploader": "Test Channel",
+        "duration": 180,
+        "thumbnail": "https://example.com/thumb.jpg",
+        "resolution": "1920x1080",
+        "height": 1080,
+        "filesize_approx": 52428800,
+    }
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            return fake_info
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+
+    dl._prefetch_task_info(task.task_id)
+
+    updated = dl._tasks[task.task_id]
+    assert updated.title == "Awesome Sample Video"
+    assert updated.uploader == "Test Channel"
+    assert updated.duration_str == "03:00"
+    assert updated.quality_label == "1920x1080 · H264"
+    assert "~50.0 MB" in updated.estimated_size
+
+

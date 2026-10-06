@@ -96,6 +96,10 @@ class DownloadTask:
     output_path: str = ""
     is_audio: bool = False
     prefs: DownloadPreferences = field(default_factory=DownloadPreferences)
+    uploader: str = ""
+    duration_str: str = ""
+    quality_label: str = ""
+    estimated_size: str = ""
 
 
 # ──────────────────────────────────────────────
@@ -209,6 +213,14 @@ class Downloader:
             self._queue.append(task.task_id)
 
         self._update_task(task)
+
+        # Pre-fetch metadata in background so queue items display title, size, and quality
+        threading.Thread(
+            target=self._prefetch_task_info,
+            args=(task.task_id,),
+            daemon=True,
+            name=f"seal-prefetch-{task.task_id[:8]}",
+        ).start()
 
         # If queue is already running, advance queue
         if self._queue_running and not self._active_task_id:
@@ -379,6 +391,108 @@ class Downloader:
         with self._lock:
             self._tasks[task.task_id] = task
         self.on_task_updated(task)
+
+    def _prefetch_task_info(self, task_id: str) -> None:
+        """Fetch video metadata in background for queued tasks without starting download."""
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task or task.state not in (DownloadState.QUEUED, DownloadState.PAUSED):
+                return
+            prefs = task.prefs
+            url = task.url
+
+        ydl_opts = self._base_opts(prefs, quiet=True)
+        ydl_opts.update(
+            {
+                "skip_download": True,
+                "extract_flat": "in_playlist",
+                "noplaylist": False,
+                "playlistend": 1,
+            }
+        )
+
+        if prefs.extract_audio:
+            ydl_opts["format"] = "bestaudio/best"
+        else:
+            if prefs.video_quality == "best":
+                ydl_opts["format"] = "bestvideo+bestaudio/best"
+            else:
+                h = prefs.video_quality
+                ydl_opts["format"] = f"bestvideo[height<={h}]+bestaudio/best[height<={h}]"
+
+            if prefs.video_codec == "h264":
+                ydl_opts["format_sort"] = ["vcodec:h264", "acodec:m4a"]
+            elif prefs.video_codec == "vp9":
+                ydl_opts["format_sort"] = ["vcodec:vp9"]
+            elif prefs.video_codec == "av1":
+                ydl_opts["format_sort"] = ["vcodec:av01"]
+
+        try:
+            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                info = ydl.extract_info(url, download=False)
+                if not info:
+                    return
+
+            with self._lock:
+                task = self._tasks.get(task_id)
+                if not task:
+                    return
+
+                entries = info.get("entries") or []
+                first = entries[0] if entries else info
+
+                # Title
+                raw_title = info.get("title") or first.get("title")
+                if raw_title:
+                    task.title = raw_title
+
+                # Thumbnail & Uploader
+                task.thumbnail_url = first.get("thumbnail") or info.get("thumbnail") or ""
+                task.uploader = first.get("uploader") or first.get("channel") or ""
+
+                # Duration
+                dur = first.get("duration") or 0
+                if dur:
+                    task.duration_str = _fmt_eta(dur)
+
+                # Quality Label
+                if prefs.extract_audio:
+                    task.quality_label = f"Audio · {prefs.audio_format.upper()}"
+                else:
+                    res = first.get("resolution")
+                    if not res and first.get("height"):
+                        res = f"{first.get('height')}p"
+                    codec_tag = prefs.video_codec.upper() if prefs.video_codec != "auto" else "Auto"
+                    task.quality_label = f"{res} · {codec_tag}" if res else codec_tag
+
+                # Estimated size calculation
+                est_bytes = None
+                req_fmts = first.get("requested_formats")
+                if req_fmts:
+                    sz_parts = []
+                    for f in req_fmts:
+                        sz = f.get("filesize") or f.get("filesize_approx")
+                        if not sz and f.get("tbr") and dur:
+                            sz = int(f.get("tbr") * 1024 * dur / 8)
+                        if sz:
+                            sz_parts.append(sz)
+                    if sz_parts:
+                        est_bytes = sum(sz_parts)
+
+                if not est_bytes:
+                    est_bytes = first.get("filesize") or first.get("filesize_approx")
+                if not est_bytes and dur and first.get("tbr"):
+                    est_bytes = int(first.get("tbr") * 1024 * dur / 8)
+
+                if est_bytes and est_bytes > 0:
+                    task.estimated_size = f"~{_fmt_bytes(est_bytes)}"
+                    if not task.size:
+                        task.size = task.estimated_size
+
+            self._update_task(task)
+
+        except Exception:  # noqa: BLE001
+            pass
 
     def _worker(
         self,
