@@ -239,7 +239,11 @@ class Downloader:
         with self._lock:
             self._queue_running = True
         self.on_queue_status_changed(True)
-        self._process_next_in_queue()
+        threading.Thread(
+            target=self._process_next_in_queue,
+            daemon=True,
+            name="seal-queue-start",
+        ).start()
 
     def pause_queue(self) -> None:
         """Pause sequential processing."""
@@ -275,16 +279,24 @@ class Downloader:
                 self._update_task(task)
 
     def resume_download(self, task_id: str) -> None:
-        """Resume a paused task."""
+        """Resume a paused task without forcibly restarting a stopped queue."""
         with self._lock:
             task = self._tasks.get(task_id)
             if not task or task.state != DownloadState.PAUSED:
                 return
             task.state = DownloadState.QUEUED
             self._update_task(task)
+            should_resume_queue = self._queue_running
 
-        if self._queue_running and not self._active_task_id:
-            self._process_next_in_queue()
+        self.on_queue_status_changed(should_resume_queue)
+        # Only continue the queue if it was already running; a paused task should
+        # remain queued until the queue is explicitly started again.
+        if should_resume_queue and not self._active_task_id:
+            threading.Thread(
+                target=self._process_next_in_queue,
+                daemon=True,
+                name="seal-queue-resume",
+            ).start()
 
     def cancel_download(self, task_id: str) -> None:
         """Cancel an active task."""
@@ -311,8 +323,15 @@ class Downloader:
             if was_active:
                 self._active_task_id = None
 
-        if was_active and self._queue_running:
-            self._process_next_in_queue()
+        # Always advance queue when running — not only when the deleted task was
+        # the active one. Fixes B1: deleting a PAUSED/QUEUED task while another
+        # download was active would leave the queue frozen.
+        if self._queue_running:
+            threading.Thread(
+                target=self._process_next_in_queue,
+                daemon=True,
+                name="seal-queue-after-delete",
+            ).start()
 
     def get_tasks(self) -> list[DownloadTask]:
         with self._lock:
@@ -342,6 +361,7 @@ class Downloader:
 
     def _process_next_in_queue(self) -> None:
         """Selects and triggers the next task sequentially (one after one)."""
+        thread: threading.Thread | None = None
         with self._lock:
             if not self._queue_running:
                 return
@@ -360,6 +380,9 @@ class Downloader:
             if not next_task:
                 return
 
+            # Set _active_task_id BEFORE releasing the lock so that any concurrent
+            # call to _process_next_in_queue sees a non-None active ID and exits
+            # immediately (fixes R2: TOCTOU race with duplicate workers).
             self._active_task_id = next_task.task_id
             cancel_ev = threading.Event()
             pause_ev = threading.Event()
@@ -373,8 +396,9 @@ class Downloader:
                 name=f"seal-dl-{next_task.task_id[:8]}",
             )
             self._threads[next_task.task_id] = thread
-
-        thread.start()
+            # Start the thread while still holding the lock so _active_task_id
+            # is already committed before any other thread races in.
+            thread.start()
 
     def _on_task_finished(self, task_id: str) -> None:
         """Called when a worker finishes its run; triggers the next queued item."""
@@ -389,6 +413,10 @@ class Downloader:
 
     def _update_task(self, task: DownloadTask) -> None:
         with self._lock:
+            # Guard: if the task was deleted while a background thread was still
+            # running (e.g. prefetch), do NOT re-insert it (fixes ghost-task bug B2).
+            if task.task_id not in self._tasks:
+                return
             self._tasks[task.task_id] = task
         self.on_task_updated(task)
 
@@ -536,6 +564,10 @@ class Downloader:
             else:
                 task.state = DownloadState.COMPLETED
                 task.progress = 1.0
+                if task.output_path.endswith(".part"):
+                    cleaned = task.output_path[:-5]
+                    if Path(cleaned).exists():
+                        task.output_path = cleaned
             self._update_task(task)
 
         except yt_dlp.utils.DownloadError as exc:
@@ -583,7 +615,8 @@ class Downloader:
                 self._update_task(task)
 
             elif status == "finished":
-                task.output_path = d.get("filename") or ""
+                if not task.output_path:
+                    task.output_path = d.get("filename") or ""
                 task.state = DownloadState.CONVERTING
                 task.progress = 0.99
                 self._update_task(task)
@@ -598,7 +631,10 @@ class Downloader:
     def _postproc_hook(self, task: DownloadTask) -> Callable:
         def hook(d: dict) -> None:
             if d.get("status") == "finished":
-                task.output_path = d.get("info_dict", {}).get("filepath") or task.output_path
+                info = d.get("info_dict") or {}
+                final = info.get("filepath") or info.get("filename")
+                if final:
+                    task.output_path = final
                 self._update_task(task)
 
         return hook

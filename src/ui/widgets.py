@@ -9,6 +9,7 @@ import tkinter as tk
 from collections.abc import Callable
 from typing import Any
 
+from ..core.i18n import t
 from .theme import FONTS, PALETTE, SPACING
 
 P = PALETTE  # shorthand
@@ -129,7 +130,7 @@ class SealButton(tk.Frame):
 
 
 class SealEntry(tk.Frame):
-    """Styled single-line entry with focus ring."""
+    """Styled single-line entry with focus ring and right-click context menu."""
 
     def __init__(
         self,
@@ -165,6 +166,31 @@ class SealEntry(tk.Frame):
 
         self._entry.bind("<FocusIn>", self._on_focus_in)
         self._entry.bind("<FocusOut>", self._on_focus_out)
+        # Clear placeholder before paste so it never merges with placeholder text
+        self._entry.bind("<<Paste>>", self._on_paste)
+        # Right-click context menu
+        self._entry.bind("<Button-3>", self._show_context_menu)
+        self._entry.bind("<Button-2>", self._show_context_menu)  # middle-click (X11)
+
+        # Build context menu
+        self._ctx_menu = tk.Menu(
+            self._entry,
+            tearoff=0,
+            bg=P["bg_2"],
+            fg=P["text_primary"],
+            activebackground=P["accent"],
+            activeforeground="white",
+            relief="flat",
+            bd=0,
+            font=FONTS["body"],
+        )
+        self._ctx_menu.add_command(label="Cut", command=self._ctx_cut)
+        self._ctx_menu.add_command(label="Copy", command=self._ctx_copy)
+        self._ctx_menu.add_command(label="Paste", command=self._ctx_paste)
+        self._ctx_menu.add_separator()
+        self._ctx_menu.add_command(label="Select All", command=self._ctx_select_all)
+
+    # ── Placeholder helpers ────────────────────
 
     def _show_placeholder(self) -> None:
         if not self._var.get():
@@ -186,6 +212,48 @@ class SealEntry(tk.Frame):
         self.configure(bg=P["entry_border"])
         self._show_placeholder()
 
+    def _on_paste(self, _e: tk.Event) -> None:
+        """Ensure placeholder is cleared before pasted text lands in the entry."""
+        self._hide_placeholder()
+        # Return None so the default paste handler still runs
+
+    # ── Context menu ───────────────────────────
+
+    def _show_context_menu(self, e: tk.Event) -> None:
+        """Show right-click context menu at the cursor position."""
+        self._entry.focus_set()
+        self._hide_placeholder()
+        # Refresh labels in case language changed
+        self._ctx_menu.entryconfig(0, label=t("ctx_cut"))
+        self._ctx_menu.entryconfig(1, label=t("ctx_copy"))
+        self._ctx_menu.entryconfig(2, label=t("ctx_paste"))
+        self._ctx_menu.entryconfig(4, label=t("ctx_select_all"))
+        try:
+            self._ctx_menu.tk_popup(e.x_root, e.y_root)
+        finally:
+            self._ctx_menu.grab_release()
+
+    def _ctx_cut(self) -> None:
+        if self._entry.selection_present():
+            self._entry.event_generate("<<Cut>>")
+        if not self._var.get():
+            self._show_placeholder()
+
+    def _ctx_copy(self) -> None:
+        if self._entry.selection_present():
+            self._entry.event_generate("<<Copy>>")
+
+    def _ctx_paste(self) -> None:
+        self._hide_placeholder()
+        self._entry.event_generate("<<Paste>>")
+
+    def _ctx_select_all(self) -> None:
+        self._hide_placeholder()
+        self._entry.select_range(0, "end")
+        self._entry.icursor("end")
+
+    # ── Public API ─────────────────────────────
+
     def get(self) -> str:
         if self._has_placeholder:
             return ""
@@ -200,6 +268,12 @@ class SealEntry(tk.Frame):
         self._var.set("")
         self._has_placeholder = False
         self._show_placeholder()
+
+    def update_placeholder(self, placeholder: str) -> None:
+        """Update the placeholder text (called on language change)."""
+        self._placeholder = placeholder
+        if self._has_placeholder:
+            self._var.set(placeholder)
 
     def bind_entry(self, event: str, callback: Callable) -> None:
         self._entry.bind(event, callback)
@@ -437,7 +511,24 @@ class SealScrollFrame(tk.Frame):
 
         self.inner.bind("<Configure>", self._on_inner_configure)
         self._canvas.bind("<Configure>", self._on_canvas_configure)
+
+        # Scope mousewheel to this frame only: activate on Enter, deactivate on Leave.
+        # Fixes B4: using bind_all captured scroll events globally, meaning the last
+        # SealScrollFrame created would intercept ALL scroll events app-wide.
+        self._canvas.bind("<Enter>", self._on_enter)
+        self._canvas.bind("<Leave>", self._on_leave)
+        self.inner.bind("<Enter>", self._on_enter)
+        self.inner.bind("<Leave>", self._on_leave)
+
+    def _on_enter(self, _e: tk.Event) -> None:
         self._canvas.bind_all("<MouseWheel>", self._on_mousewheel)
+        self._canvas.bind_all("<Button-4>", self._on_mousewheel_linux)  # Linux scroll up
+        self._canvas.bind_all("<Button-5>", self._on_mousewheel_linux)  # Linux scroll down
+
+    def _on_leave(self, _e: tk.Event) -> None:
+        self._canvas.unbind_all("<MouseWheel>")
+        self._canvas.unbind_all("<Button-4>")
+        self._canvas.unbind_all("<Button-5>")
 
     def _on_inner_configure(self, _e: tk.Event) -> None:
         self._canvas.configure(scrollregion=self._canvas.bbox("all"))
@@ -447,3 +538,6 @@ class SealScrollFrame(tk.Frame):
 
     def _on_mousewheel(self, e: tk.Event) -> None:
         self._canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+
+    def _on_mousewheel_linux(self, e: tk.Event) -> None:
+        self._canvas.yview_scroll(-1 if e.num == 4 else 1, "units")

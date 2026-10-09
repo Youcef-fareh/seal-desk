@@ -316,6 +316,9 @@ jobs:
             - Metadata & thumbnail embedding
             - Subtitle embedding
             - Download history with search
+            - Timestamped history and retry for failed downloads
+            - Live light/dark theme switching
+            - Facebook URL support via yt-dlp
             - Proxy & rate-limit support
             - aria2c external downloader support
             - **FFmpeg bundled** — no separate installation required

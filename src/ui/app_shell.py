@@ -15,7 +15,7 @@ from ..core.updater import CURRENT_VERSION, AppReleaseInfo, check_app_update
 from .pages.download_page import DownloadPage
 from .pages.history_page import HistoryPage
 from .pages.settings_page import SettingsPage
-from .theme import FONTS, SIDEBAR_WIDTH, SPACING
+from .theme import FONTS, SIDEBAR_WIDTH, SPACING, apply_theme
 from .theme import PALETTE as P
 from .widgets import SealButton
 
@@ -121,6 +121,7 @@ class AppShell(tk.Frame):
 
         # Initialize language from settings
         set_language(settings.get("language", "en"))
+        apply_theme(settings.get("theme", "dark") != "light")
         add_language_listener(self._retranslate)
 
         self._build_sidebar()
@@ -134,6 +135,14 @@ class AppShell(tk.Frame):
     def destroy(self) -> None:
         remove_language_listener(self._retranslate)
         super().destroy()
+
+    def _apply_theme(self) -> None:
+        apply_theme(settings.get("theme", "dark") != "light")
+        for page in list(self._pages.values()):
+            if page.winfo_exists():
+                page.destroy()
+        self._pages.clear()
+        self._navigate(self._current_page)
 
     def _build_sidebar(self) -> None:
         sidebar = tk.Frame(self, bg=P["bg_1"], width=SIDEBAR_WIDTH)
@@ -268,7 +277,7 @@ class AppShell(tk.Frame):
                 "history": HistoryPage,
                 "settings": SettingsPage,
             }[page_id]
-            page = page_cls(self._content, self._navigate)
+            page = page_cls(self._content, self._navigate, theme_callback=self._apply_theme)
             self._pages[page_id] = page
 
         self._pages[page_id].pack(fill="both", expand=True)
@@ -286,7 +295,15 @@ class AppShell(tk.Frame):
             text=f"🚀  {t('update_available_msg', version=info.version, current=CURRENT_VERSION)}"
         )
         self._update_banner_btn.configure_text(t("btn_download_update"))
-        self._update_banner.pack(fill="x", side="top", before=self._pages.get(self._current_page))
+        pack_kwargs: dict = {"fill": "x", "side": "top"}
+        current_page_widget = self._pages.get(self._current_page)
+        if (
+            current_page_widget
+            and current_page_widget.winfo_exists()
+            and current_page_widget.winfo_manager() == "pack"
+        ):
+            pack_kwargs["before"] = current_page_widget
+        self._update_banner.pack(**pack_kwargs)
 
     def _on_update_banner_click(self) -> None:
         if self._latest_release_info:

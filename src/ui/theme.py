@@ -9,7 +9,7 @@ from __future__ import annotations
 # Color Palette  (Dark-first, Material-inspired + Violet accent)
 # ──────────────────────────────────────────────────────────────────────────────
 
-PALETTE = {
+BASE_PALETTE = {
     # Background layers
     "bg_0": "#0D0D0F",  # deepest background (window)
     "bg_1": "#141417",  # card / panel background
@@ -54,6 +54,8 @@ PALETTE = {
     "entry_border_focus": "#8B5CF6",
 }
 
+PALETTE = dict(BASE_PALETTE)
+
 # Light-mode overrides (WIP — not yet wired to UI toggle)
 LIGHT_OVERRIDES = {
     "bg_0": "#F4F4F8",
@@ -73,10 +75,15 @@ LIGHT_OVERRIDES = {
 
 
 def get_palette(dark: bool = True) -> dict[str, str]:
-    p = dict(PALETTE)
+    p = dict(BASE_PALETTE)
     if not dark:
         p.update(LIGHT_OVERRIDES)
     return p
+
+
+def apply_theme(dark: bool = True) -> None:
+    PALETTE.clear()
+    PALETTE.update(get_palette(dark))
 
 
 # ──────────────────────────────────────────────────────────────────────────────

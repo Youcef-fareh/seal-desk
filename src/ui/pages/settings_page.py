@@ -140,9 +140,15 @@ def _dropdown_row(
 
 
 class SettingsPage(tk.Frame):
-    def __init__(self, parent: tk.Widget, nav_callback: Callable) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        nav_callback: Callable,
+        theme_callback: Callable[[], None] | None = None,
+    ) -> None:
         super().__init__(parent, bg=P["bg_0"])
         self._nav = nav_callback
+        self._theme_callback = theme_callback
         self._trans_labels: list[tuple[tk.Label, str]] = []
         self._trans_buttons: list[tuple[SealButton, str]] = []
         add_language_listener(self._retranslate)
@@ -207,6 +213,20 @@ class SettingsPage(tk.Frame):
             bd=0,
         )
         lang_menu.pack(side="right")
+
+        row_theme, lbl_theme = _row(sec_gen, t("label_theme"))
+        self._trans_labels.append((lbl_theme, "label_theme"))
+        self._theme_var = tk.BooleanVar(value=settings.get("theme", "dark") != "light")
+        self._theme_switch = SealSwitch(
+            row_theme,
+            variable=self._theme_var,
+            command=lambda value: (
+                settings.set("theme", "dark" if value else "light"),
+                self._theme_callback() if self._theme_callback else None,
+            ),
+        )
+        self._theme_switch.configure(bg=P["bg_1"])
+        self._theme_switch.pack(side="right")
 
         # ── 2. Download Options ─────────────────────
         sec_dl_lbl, sec_dl = _section(inner, t("sec_download"))
@@ -434,21 +454,25 @@ class SettingsPage(tk.Frame):
     # ── Actions ───────────────────────────────
 
     def _refresh_ffmpeg_status(self) -> None:
+        if not self.winfo_exists() or not self._ffmpeg_status_lbl.winfo_exists():
+            return
         if is_ffmpeg_available():
             self._ffmpeg_status_lbl.configure(
                 text="✔  " + t("ffmpeg_ready"),
                 fg=P["success"],
             )
-            self._ffmpeg_setup_btn.pack_forget()
+            if self._ffmpeg_setup_btn.winfo_exists():
+                self._ffmpeg_setup_btn.pack_forget()
         else:
             self._ffmpeg_status_lbl.configure(
                 text="⚠️  " + t("ffmpeg_missing"),
                 fg=P["warning"],
             )
-            self._ffmpeg_setup_btn.pack(side="right")
+            if self._ffmpeg_setup_btn.winfo_exists():
+                self._ffmpeg_setup_btn.pack(side="right")
 
     def _setup_ffmpeg(self) -> None:
-        self._ffmpeg_setup_btn.configure_text("Installing…")
+        self._ffmpeg_setup_btn.configure_text(t("status_installing"))
 
         def on_prog(_pct: float, msg: str) -> None:
             self.after(0, lambda: self._ffmpeg_setup_btn.configure_text(msg[:22]))
@@ -467,7 +491,7 @@ class SettingsPage(tk.Frame):
         download_ffmpeg_async(on_prog, on_done)
 
     def _check_app_updates_clicked(self) -> None:
-        self._app_update_btn.configure_text("Checking…")
+        self._app_update_btn.configure_text(t("status_checking"))
         self._app_update_msg.configure(text="")
 
         def on_result(info: AppReleaseInfo | None, error: str | None) -> None:
@@ -568,7 +592,7 @@ class SettingsPage(tk.Frame):
     def _download_and_run_update(
         self, info: AppReleaseInfo, btn: SealButton, dlg: tk.Toplevel
     ) -> None:
-        btn.configure_text("Downloading…")
+        btn.configure_text(t("status_downloading"))
 
         def on_prog(_pct: float, msg: str) -> None:
             self.after(0, lambda: btn.configure_text(msg[:20]))
@@ -576,7 +600,7 @@ class SettingsPage(tk.Frame):
         def on_done(success: bool, path_or_err: str) -> None:
             def _apply() -> None:
                 if success:
-                    btn.configure_text("Ready!")
+                    btn.configure_text(t("status_ready"))
                     if sys.platform == "win32" and path_or_err.endswith(".exe"):
                         os.startfile(path_or_err)
                         dlg.destroy()
@@ -605,7 +629,7 @@ class SettingsPage(tk.Frame):
             self._cookie_lbl.configure(text=self._short(f))
 
     def _update_ytdlp(self) -> None:
-        self._ytdlp_update_btn.configure_text("Updating…")
+        self._ytdlp_update_btn.configure_text(t("status_updating"))
 
         def done(success: bool, msg: str) -> None:
             self.after(
@@ -623,12 +647,16 @@ class SettingsPage(tk.Frame):
 
     def _retranslate(self) -> None:
         """Dynamically refresh labels when language is changed."""
-        self._page_title_lbl.configure(text=t("settings_title"))
+        if self.winfo_exists() and self._page_title_lbl.winfo_exists():
+            self._page_title_lbl.configure(text=t("settings_title"))
         for lbl, key in self._trans_labels:
-            lbl.configure(text=t(key).upper() if key.startswith("sec_") else t(key))
+            if lbl.winfo_exists():
+                lbl.configure(text=t(key).upper() if key.startswith("sec_") else t(key))
         for btn, key in self._trans_buttons:
-            btn.configure_text(t(key))
-        self._about_lbl.configure(text=t("about_desc"))
+            if btn.winfo_exists():
+                btn.configure_text(t(key))
+        if self._about_lbl.winfo_exists():
+            self._about_lbl.configure(text=t("about_desc"))
         self._refresh_ffmpeg_status()
 
     @staticmethod

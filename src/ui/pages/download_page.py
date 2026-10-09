@@ -7,6 +7,7 @@ audio-video merger controls, and full Arabic/English bilingual interface.
 from __future__ import annotations
 
 import os
+import re
 import subprocess
 import sys
 import tkinter as tk
@@ -93,6 +94,16 @@ class DownloadCard(SealCard):
             height=28,
         )
         self._pause_btn.pack(side="left", padx=(4, 0))
+
+        self._retry_btn = SealButton(
+            self._actions_frame,
+            text="↻",
+            variant="secondary",
+            command=self._retry,
+            width=32,
+            height=28,
+        )
+        self._retry_btn.pack(side="left", padx=(4, 0))
 
         self._delete_btn = SealButton(
             self._actions_frame,
@@ -208,6 +219,11 @@ class DownloadCard(SealCard):
         else:
             self._pause_btn.pack_forget()
 
+        if task.state == DownloadState.ERROR:
+            self._retry_btn.pack(side="left", padx=(4, 0))
+        else:
+            self._retry_btn.pack_forget()
+
         if task.state == DownloadState.COMPLETED and task.output_path:
             self._folder_btn.pack(side="left", padx=(4, 0))
         else:
@@ -221,6 +237,11 @@ class DownloadCard(SealCard):
             downloader.resume_download(self.task.task_id)
         else:
             downloader.pause_download(self.task.task_id)
+
+    def _retry(self) -> None:
+        if self.task.state != DownloadState.ERROR or not self.task.url:
+            return
+        downloader.start_download(self.task.url, self.task.prefs)
 
     def _delete(self) -> None:
         self._on_delete(self.task.task_id)
@@ -496,7 +517,7 @@ class DownloadPage(tk.Frame):
         self._install_ffmpeg_btn.pack(side="right", padx=(SPACING["sm"], 0))
 
     def _install_ffmpeg_quick(self) -> None:
-        self._install_ffmpeg_btn.configure_text("Installing…")
+        self._install_ffmpeg_btn.configure_text(t("status_installing"))
 
         def on_prog(_pct: float, msg: str) -> None:
             self.after(0, lambda: self._install_ffmpeg_btn.configure_text(msg[:20]))
@@ -547,10 +568,25 @@ class DownloadPage(tk.Frame):
         prefs.video_codec = self._codec_var.get()
         return prefs
 
+    # Matches any http:// or https:// URL with at least a hostname.
+    _URL_RE = re.compile(r"^https?://[^\s/$.?#][^\s]*$", re.IGNORECASE)
+
+    def _validate_url(self, url: str) -> bool:
+        """Return True if url looks like a valid HTTP(S) link, show warning otherwise."""
+        if self._URL_RE.match(url):
+            return True
+        messagebox.showwarning(
+            t("invalid_url_title"),
+            t("invalid_url_msg"),
+        )
+        return False
+
     def _queue_item(self) -> None:
         """Add link to the staged queue without immediately starting it."""
         url = self._url_entry.get().strip()
         if not url:
+            return
+        if not self._validate_url(url):
             return
 
         prefs = self._collect_current_prefs()
@@ -566,6 +602,8 @@ class DownloadPage(tk.Frame):
         """Add link and immediately start sequential queue execution."""
         url = self._url_entry.get().strip()
         if not url:
+            return
+        if not self._validate_url(url):
             return
 
         prefs = self._collect_current_prefs()
@@ -691,6 +729,7 @@ class DownloadPage(tk.Frame):
         self._list_title.configure_text(t("downloads_header"))
         self._clear_btn.configure_text(t("btn_clear_done"))
         self._empty_lbl.configure(text=t("empty_downloads"))
+        self._url_entry.update_placeholder(t("url_placeholder"))
         self._update_queue_label()
 
         for card in self._task_cards.values():

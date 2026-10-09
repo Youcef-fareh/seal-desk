@@ -103,6 +103,7 @@ def download_ffmpeg_async(
     def _worker() -> None:
         try:
             if sys.platform != "win32":
+                progress_callback(0.0, "")
                 done_callback(
                     False,
                     "Please install ffmpeg via your package manager (e.g. sudo apt install ffmpeg)",

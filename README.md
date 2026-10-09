@@ -31,11 +31,13 @@ Download from **1000+ sites** including YouTube, SoundCloud, Twitch, Twitter/X, 
 | 📂 **Playlist Support** | Download full playlists with organized subdirectories |
 | 🏷 **Metadata Embedding** | Titles, artists, thumbnails, chapters |
 | 📝 **Subtitle Embedding** | Download & embed subtitles in your language |
-| 📋 **History** | Searchable download history with folder quick-open |
+| 📋 **History** | Searchable, timestamped download history with folder quick-open |
 | ⚡ **Fast Downloads** | Concurrent fragments + optional aria2c integration |
 | 🌐 **Proxy Support** | HTTP/HTTPS/SOCKS proxy support |
 | 📊 **Live Progress** | Real-time speed, ETA, and progress per download |
-| 🎨 **Dark UI** | Modern dark interface with violet accent |
+| 🎨 **Themes** | Live dark/light theme switching with violet accent |
+| 🔁 **Retry Failed Downloads** | Retry failed tasks directly from the download queue |
+| 🌐 **Broad Site Support** | Facebook and 1000+ other sites supported through yt-dlp |
 | ⚙ **Flexible Settings** | Output templates, rate limiting, cookies file, FFmpeg auto-installer |
 
 ## 🖥 Supported Platforms

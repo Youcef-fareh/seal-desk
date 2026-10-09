@@ -10,6 +10,7 @@ import subprocess
 import sys
 import tkinter as tk
 from collections.abc import Callable
+from datetime import datetime
 
 from ...core.i18n import add_language_listener, remove_language_listener, t
 from ...core.settings import settings
@@ -58,6 +59,22 @@ class HistoryRow(tk.Frame):
             font=FONTS["caption"],
             anchor="w",
         ).pack(fill="x")
+
+        downloaded_at = self._entry.get("downloaded_at")
+        if downloaded_at:
+            try:
+                ts = datetime.fromisoformat(downloaded_at.replace("Z", "+00:00"))
+                stamp = ts.strftime("%Y-%m-%d %H:%M")
+            except ValueError:
+                stamp = str(downloaded_at)
+            tk.Label(
+                self,
+                text=f"🕒 {stamp}",
+                bg=P["bg_1"],
+                fg=P["text_tertiary"],
+                font=FONTS["caption"],
+                anchor="w",
+            ).pack(fill="x")
 
         tk.Frame(self, bg=P["divider"], height=1).pack(fill="x", pady=(SPACING["sm"], 0))
 
@@ -164,3 +181,5 @@ class HistoryPage(tk.Frame):
         self._title_lbl.configure_text(t("history_title"))
         self._clear_btn.configure_text(t("btn_clear_all"))
         self._empty_lbl.configure(text=t("empty_history"))
+        self._search_entry.update_placeholder(t("search_history_placeholder"))
+        self._filter()

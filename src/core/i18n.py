@@ -18,10 +18,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_download": "Download",
         "nav_history": "History",
         "nav_settings": "Settings",
-        "app_footer": "v1.2.1 · Powered by yt-dlp",
+        "app_footer": "v1.3.0 · Powered by yt-dlp",
         # Download Page Header & Inputs
         "page_download_title": "Download",
-        "url_placeholder": "Paste a YouTube, SoundCloud, or any supported URL…",
+        "url_placeholder": "Paste a YouTube, Facebook, SoundCloud, or any supported URL…",
         "btn_download_now": "Download Now",
         "btn_add_queue": "Add to Queue",
         "btn_start_queue": "Start Downloads",
@@ -67,6 +67,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings_title": "Settings",
         "sec_general": "General & Language",
         "label_language": "Interface Language",
+        "label_theme": "Theme",
         "sec_download": "Download Options",
         "label_output_dir": "Output folder",
         "label_output_template": "Output template",
@@ -98,7 +99,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_check_updates": "🔄 Check for App Updates",
         "btn_update_ytdlp": "⬆ Update yt-dlp",
         "sec_about": "About",
-        "about_desc": "Seal Desktop v1.2.1\nA modern cross-platform video & audio downloader powered by yt-dlp.\nFeatures: sequential queue, audio-video merger, multi-download handling, auto-updater.",
+        "about_desc": "Seal Desktop v1.3.0\nA modern cross-platform video & audio downloader powered by yt-dlp.\nFeatures: sequential queue, audio-video merger, multi-download handling, auto-updater.",
         # Dialogs / Updates
         "update_available_title": "New Update Available!",
         "update_available_msg": "Version {version} is available! (Current: {current})",
@@ -109,6 +110,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "up_to_date": "You are using the latest version of Seal Desktop ({version}).",
         "update_check_failed": "Failed to check for updates. Check your internet connection.",
         "browse": "Browse",
+        "status_checking": "Checking…",
+        "status_installing": "Installing…",
+        "status_downloading": "Downloading…",
+        "status_ready": "Ready!",
+        "status_updating": "Updating…",
+        # Entry context menu
+        "ctx_cut": "Cut",
+        "ctx_copy": "Copy",
+        "ctx_paste": "Paste",
+        "ctx_select_all": "Select All",
+        # URL validation
+        "invalid_url_title": "Invalid URL",
+        "invalid_url_msg": "Please enter a valid URL starting with http:// or https://.",
+        # Single instance
+        "app_already_running_title": "Seal Desktop",
+        "app_already_running_msg": "Another instance of Seal Desktop is already running.",
     },
     "ar": {
         # App & Nav
@@ -117,10 +134,10 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_download": "التحميل",
         "nav_history": "السجل",
         "nav_settings": "الإعدادات",
-        "app_footer": "الإصدار 1.2.1 · مدعوم بواسطة yt-dlp",
+        "app_footer": "الإصدار 1.3.0 · مدعوم بواسطة yt-dlp",
         # Download Page Header & Inputs
         "page_download_title": "التحميل",
-        "url_placeholder": "ألصق رابط يوتيوب أو ساوند كلاود أو أي رابط مدعوم…",
+        "url_placeholder": "ألصق رابط يوتيوب أو فيسبوك أو ساوند كلاود أو أي رابط مدعوم…",
         "btn_download_now": "تحميل الآن",
         "btn_add_queue": "إضافة لقائمة الانتظار",
         "btn_start_queue": "بدء التحميلات",
@@ -166,6 +183,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "settings_title": "الإعدادات",
         "sec_general": "عام واللغة",
         "label_language": "لغة الواجهة",
+        "label_theme": "المظهر",
         "sec_download": "خيارات التحميل",
         "label_output_dir": "مجلد الحفظ",
         "label_output_template": "قالب تسمية الملفات",
@@ -197,7 +215,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_check_updates": "🔄 فحص تحديثات التطبيق",
         "btn_update_ytdlp": "⬆ تحديث yt-dlp",
         "sec_about": "حول البرنامج",
-        "about_desc": "سيل ديسكتوب v1.2.1\nبرنامج حديث لتحميل الفيديو والصوت عبر مختلف المنصات مدعوم بـ yt-dlp.\nالميزات: قائمة تحميل تتابعية، دمج الصوت والفيديو، تحكم كامل بالإيقاف والاستئناف، تحديثات تلقائية.",
+        "about_desc": "سيل ديسكتوب v1.3.0\nبرنامج حديث لتحميل الفيديو والصوت عبر مختلف المنصات مدعوم بـ yt-dlp.\nالميزات: قائمة تحميل تتابعية، دمج الصوت والفيديو، تحكم كامل بالإيقاف والاستئناف، تحديثات تلقائية.",
         # Dialogs / Updates
         "update_available_title": "يتوفر تحديث جديد!",
         "update_available_msg": "الإصدار {version} متوفر الآن! (الإصدار الحالي: {current})",
@@ -208,6 +226,22 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "up_to_date": "أنت تستخدم أحدث إصدار من سيل ديسكتوب بالفعل ({version}).",
         "update_check_failed": "فشل فحص التحديثات. يرجى التحقق من اتصال الإنترنت.",
         "browse": "استعراض",
+        "status_checking": "جارٍ الفحص…",
+        "status_installing": "جارٍ التثبيت…",
+        "status_downloading": "جارٍ التنزيل…",
+        "status_ready": "جاهز!",
+        "status_updating": "جارٍ التحديث…",
+        # Entry context menu
+        "ctx_cut": "قص",
+        "ctx_copy": "نسخ",
+        "ctx_paste": "لصق",
+        "ctx_select_all": "تحديد الكل",
+        # URL validation
+        "invalid_url_title": "رابط غير صالح",
+        "invalid_url_msg": "يرجى إدخال رابط صحيح يبدأ بـ http:// أو https://.",
+        # Single instance
+        "app_already_running_title": "سيل ديسكتوب",
+        "app_already_running_msg": "هناك نافذة أخرى من سيل ديسكتوب قيد التشغيل بالفعل.",
     },
 }
 

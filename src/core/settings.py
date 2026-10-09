@@ -5,7 +5,9 @@ Persists user settings to a JSON file in the platform's config directory.
 
 from __future__ import annotations
 
+import atexit
 import json
+import threading
 from pathlib import Path
 from typing import Any
 
@@ -65,7 +67,10 @@ class Settings:
     def __init__(self) -> None:
         self._path = _config_path()
         self._data: dict[str, Any] = dict(DEFAULTS)
+        self._lock = threading.Lock()
+        self._save_timer: threading.Timer | None = None
         self._load()
+        atexit.register(self.save)
 
     def _load(self) -> None:
         if self._path.exists():
@@ -76,37 +81,73 @@ class Settings:
             except Exception:  # noqa: BLE001
                 pass  # Use defaults
 
+    def _schedule_save(self) -> None:
+        with self._lock:
+            if self._save_timer and self._save_timer.is_alive():
+                self._save_timer.cancel()
+            self._save_timer = threading.Timer(0.3, self.save)
+            self._save_timer.daemon = True
+            self._save_timer.start()
+
     def save(self) -> None:
-        with open(self._path, "w", encoding="utf-8") as f:
-            json.dump(self._data, f, indent=2, ensure_ascii=False)
+        with self._lock:
+            if self._save_timer and self._save_timer.is_alive():
+                self._save_timer.cancel()
+                self._save_timer = None
+            try:
+                with open(self._path, "w", encoding="utf-8") as f:
+                    json.dump(self._data, f, indent=2, ensure_ascii=False)
+            except Exception:  # noqa: BLE001
+                pass
+
+    def flush(self) -> None:
+        self.save()
 
     def get(self, key: str, default: Any = None) -> Any:
-        return self._data.get(key, DEFAULTS.get(key, default))
+        with self._lock:
+            return self._data.get(key, DEFAULTS.get(key, default))
 
     def set(self, key: str, value: Any) -> None:
-        self._data[key] = value
-        self.save()
+        with self._lock:
+            if self._data.get(key) == value:
+                return
+            self._data[key] = value
+        self._schedule_save()
 
     def update(self, mapping: dict[str, Any]) -> None:
-        self._data.update(mapping)
-        self.save()
+        changed = False
+        with self._lock:
+            for k, v in mapping.items():
+                if self._data.get(k) != v:
+                    self._data[k] = v
+                    changed = True
+        if changed:
+            self._schedule_save()
 
     # Convenience helpers
     def add_history(self, entry: dict[str, Any]) -> None:
-        history: list = self._data.get("history", [])
-        # Avoid duplicates by URL
-        history = [h for h in history if h.get("url") != entry.get("url")]
-        history.insert(0, entry)
-        history = history[:200]  # cap at 200 entries
-        self._data["history"] = history
-        self.save()
+        with self._lock:
+            history: list = self._data.get("history", [])
+            cleaned_entry = dict(entry)
+            if "downloaded_at" not in cleaned_entry:
+                from datetime import datetime
+
+                cleaned_entry["downloaded_at"] = datetime.now().isoformat()
+            # Avoid duplicates by URL
+            history = [h for h in history if h.get("url") != cleaned_entry.get("url")]
+            history.insert(0, cleaned_entry)
+            history = history[:200]  # cap at 200 entries
+            self._data["history"] = history
+        self._schedule_save()
 
     def clear_history(self) -> None:
-        self._data["history"] = []
-        self.save()
+        with self._lock:
+            self._data["history"] = []
+        self._schedule_save()
 
     def get_history(self) -> list[dict]:
-        return list(self._data.get("history", []))
+        with self._lock:
+            return list(self._data.get("history", []))
 
     @property
     def output_dir(self) -> str:
