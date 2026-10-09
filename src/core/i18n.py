@@ -18,7 +18,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_download": "Download",
         "nav_history": "History",
         "nav_settings": "Settings",
-        "app_footer": "v1.3.0 · Powered by yt-dlp",
+        "app_footer": "v1.3.1 · Powered by yt-dlp",
         # Download Page Header & Inputs
         "page_download_title": "Download",
         "url_placeholder": "Paste a YouTube, Facebook, SoundCloud, or any supported URL…",
@@ -99,7 +99,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_check_updates": "🔄 Check for App Updates",
         "btn_update_ytdlp": "⬆ Update yt-dlp",
         "sec_about": "About",
-        "about_desc": "Seal Desktop v1.3.0\nA modern cross-platform video & audio downloader powered by yt-dlp.\nFeatures: sequential queue, audio-video merger, multi-download handling, auto-updater.",
+        "about_desc": "Seal Desktop v1.3.1\nA modern cross-platform video & audio downloader powered by yt-dlp.\nFeatures: sequential queue, audio-video merger, multi-download handling, auto-updater.",
         # Dialogs / Updates
         "update_available_title": "New Update Available!",
         "update_available_msg": "Version {version} is available! (Current: {current})",
@@ -134,7 +134,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "nav_download": "التحميل",
         "nav_history": "السجل",
         "nav_settings": "الإعدادات",
-        "app_footer": "الإصدار 1.3.0 · مدعوم بواسطة yt-dlp",
+        "app_footer": "الإصدار 1.3.1 · مدعوم بواسطة yt-dlp",
         # Download Page Header & Inputs
         "page_download_title": "التحميل",
         "url_placeholder": "ألصق رابط يوتيوب أو فيسبوك أو ساوند كلاود أو أي رابط مدعوم…",
@@ -215,7 +215,7 @@ TRANSLATIONS: dict[str, dict[str, str]] = {
         "btn_check_updates": "🔄 فحص تحديثات التطبيق",
         "btn_update_ytdlp": "⬆ تحديث yt-dlp",
         "sec_about": "حول البرنامج",
-        "about_desc": "سيل ديسكتوب v1.3.0\nبرنامج حديث لتحميل الفيديو والصوت عبر مختلف المنصات مدعوم بـ yt-dlp.\nالميزات: قائمة تحميل تتابعية، دمج الصوت والفيديو، تحكم كامل بالإيقاف والاستئناف، تحديثات تلقائية.",
+        "about_desc": "سيل ديسكتوب v1.3.1\nبرنامج حديث لتحميل الفيديو والصوت عبر مختلف المنصات مدعوم بـ yt-dlp.\nالميزات: قائمة تحميل تتابعية، دمج الصوت والفيديو، تحكم كامل بالإيقاف والاستئناف، تحديثات تلقائية.",
         # Dialogs / Updates
         "update_available_title": "يتوفر تحديث جديد!",
         "update_available_msg": "الإصدار {version} متوفر الآن! (الإصدار الحالي: {current})",
