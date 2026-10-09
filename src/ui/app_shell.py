@@ -277,7 +277,10 @@ class AppShell(tk.Frame):
                 "history": HistoryPage,
                 "settings": SettingsPage,
             }[page_id]
-            page = page_cls(self._content, self._navigate, theme_callback=self._apply_theme)
+            if page_id == "settings":
+                page = page_cls(self._content, self._navigate, theme_callback=self._apply_theme)
+            else:
+                page = page_cls(self._content, self._navigate)
             self._pages[page_id] = page
 
         self._pages[page_id].pack(fill="both", expand=True)
