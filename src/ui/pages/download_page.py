@@ -10,6 +10,7 @@ import os
 import re
 import subprocess
 import sys
+import threading
 import tkinter as tk
 from collections.abc import Callable
 from pathlib import Path
@@ -23,6 +24,8 @@ from ...core.downloader import (
 )
 from ...core.ffmpeg_utils import download_ffmpeg_async, is_ffmpeg_available
 from ...core.i18n import add_language_listener, remove_language_listener, t
+from ...core.logger import YtDlpLogger
+from ...core.notifications import send_notification
 from ...core.settings import settings
 from ..theme import FONTS, SPACING
 from ..theme import PALETTE as P
@@ -47,10 +50,12 @@ class DownloadCard(SealCard):
         parent: tk.Widget,
         task: DownloadTask,
         on_delete: Callable[[str], None],
+        on_move: Callable[[str, int], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.task = task
         self._on_delete = on_delete
+        self._on_move = on_move
         self._build()
 
     def _build(self) -> None:
@@ -72,9 +77,27 @@ class DownloadCard(SealCard):
         )
         self._title_lbl.pack(side="left", fill="x", expand=True)
 
-        # Action buttons frame (Delete, Pause/Resume, Open Folder)
+        # Action buttons frame (Delete, Pause/Resume, Open Folder, Reorder)
         self._actions_frame = tk.Frame(row1, bg=P["bg_1"])
         self._actions_frame.pack(side="right")
+
+        self._up_btn = SealButton(
+            self._actions_frame,
+            text="▲",
+            variant="ghost",
+            command=self._move_up,
+            width=26,
+            height=28,
+        )
+
+        self._down_btn = SealButton(
+            self._actions_frame,
+            text="▼",
+            variant="ghost",
+            command=self._move_down,
+            width=26,
+            height=28,
+        )
 
         self._folder_btn = SealButton(
             self._actions_frame,
@@ -203,6 +226,13 @@ class DownloadCard(SealCard):
         self._pbar.set_progress(task.progress)
 
         # Update button states
+        if task.state == DownloadState.QUEUED and self._on_move:
+            self._up_btn.pack(side="left", padx=(2, 0))
+            self._down_btn.pack(side="left", padx=(2, 0))
+        else:
+            self._up_btn.pack_forget()
+            self._down_btn.pack_forget()
+
         if task.state == DownloadState.PAUSED:
             self._pause_btn.configure_text("▶")
             self._pause_btn.pack(side="left", padx=(4, 0))
@@ -231,6 +261,14 @@ class DownloadCard(SealCard):
 
         if task.state == DownloadState.ERROR and task.error:
             self._state_lbl.configure(text=f"{t('state_error')}: {task.error[:80]}")
+
+    def _move_up(self) -> None:
+        if self._on_move:
+            self._on_move(self.task.task_id, -1)
+
+    def _move_down(self) -> None:
+        if self._on_move:
+            self._on_move(self.task.task_id, 1)
 
     def _toggle_pause(self) -> None:
         if self.task.state == DownloadState.PAUSED:
@@ -293,6 +331,7 @@ class DownloadPage(tk.Frame):
             embed_metadata=s.get("embed_metadata"),
             embed_thumbnail=s.get("embed_thumbnail"),
             embed_subtitles=s.get("embed_subtitles"),
+            subtitle_source=s.get("subtitle_source", "manual"),
             subtitle_languages=s.get("subtitle_languages"),
             output_dir=s.get("output_dir"),
             output_template=s.get("output_template"),
@@ -421,6 +460,65 @@ class DownloadPage(tk.Frame):
             font=FONTS["body_sm"],
         )
         self._out_lbl.pack(side="right", padx=(0, SPACING["sm"]))
+
+        # ── Subtitle options row ─────────────────────
+        sub_row = tk.Frame(self._input_area, bg=P["bg_1"])
+        sub_row.pack(fill="x", pady=(SPACING["xs"], 0))
+
+        self._sub_src_lbl = SealLabel(
+            sub_row, t("sub_source_label"), style="body", color="text_secondary", bg=P["bg_1"]
+        )
+        self._sub_src_lbl.pack(side="left", padx=(0, SPACING["xs"]))
+
+        self._sub_src_var = tk.StringVar(value=settings.get("subtitle_source", "manual"))
+        _sub_src_display = {
+            "manual": t("sub_source_manual"),
+            "auto": t("sub_source_auto"),
+            "both": t("sub_source_both"),
+        }
+        _sub_src_opts = ["manual", "auto", "both"]
+        self._sub_src_menu = tk.OptionMenu(
+            sub_row,
+            self._sub_src_var,
+            *_sub_src_opts,
+        )
+        self._sub_src_menu["menu"].delete(0, "end")
+        for val in _sub_src_opts:
+            self._sub_src_menu["menu"].add_command(
+                label=t(f"sub_source_{val}"),
+                command=lambda v=val: self._sub_src_var.set(v),
+            )
+        self._style_menu(self._sub_src_menu)
+        self._sub_src_menu.pack(side="left")
+
+        # Subtitle languages inline hint
+        self._sub_lang_hint_lbl = SealLabel(
+            sub_row,
+            f"🌐 {t('label_sub_languages')}: {settings.get('subtitle_languages', 'en')}",
+            style="body_sm",
+            color="text_tertiary",
+            bg=P["bg_1"],
+        )
+        self._sub_lang_hint_lbl.pack(side="left", padx=(SPACING["md"], 0))
+
+        # Format picker & Playlist picker buttons
+        self._pick_fmt_btn = SealButton(
+            sub_row,
+            text=f"🎯 {t('btn_pick_format')}",
+            variant="secondary",
+            command=self._open_format_picker,
+            height=28,
+        )
+        self._pick_fmt_btn.pack(side="right", padx=(SPACING["xs"], 0))
+
+        self._pick_pl_btn = SealButton(
+            sub_row,
+            text=f"📑 {t('btn_select_items')}",
+            variant="secondary",
+            command=self._open_playlist_picker,
+            height=28,
+        )
+        self._pick_pl_btn.pack(side="right", padx=(SPACING["xs"], 0))
 
         # ── Queue Controls Bar ──────────────────────
         controls_bar = tk.Frame(self, bg=P["bg_0"])
@@ -566,9 +664,11 @@ class DownloadPage(tk.Frame):
         prefs.audio_format = self._audio_fmt_var.get()
         prefs.video_quality = self._quality_var.get()
         prefs.video_codec = self._codec_var.get()
+        prefs.subtitle_source = self._sub_src_var.get()
         return prefs
 
-    # Matches any http:// or https:// URL with at least a hostname.
+    # Accepts any syntactically valid HTTP(S) URL — platform validation is
+    # delegated to yt-dlp which natively supports 1000+ sites.
     _URL_RE = re.compile(r"^https?://[^\s/$.?#][^\s]*$", re.IGNORECASE)
 
     def _validate_url(self, url: str) -> bool:
@@ -669,6 +769,31 @@ class DownloadPage(tk.Frame):
                     "is_audio": task.is_audio,
                 }
             )
+            if settings.get("desktop_notifications", True):
+                send_notification(
+                    t("notify_completed_title"),
+                    t("notify_completed_msg", title=(task.title or "Download")[:60]),
+                )
+        elif task.state == DownloadState.ERROR:
+            if settings.get("desktop_notifications", True):
+                send_notification(
+                    t("notify_error_title"),
+                    t("notify_error_msg", title=(task.title or "Download")[:40], error=(task.error or "")[:60]),
+                )
+            if task.error:
+                # Detect unsupported-site / no-extractor errors from yt-dlp and
+                # surface a friendly dialog instead of the raw exception string.
+                _err_lower = task.error.lower()
+                if (
+                    "no suitable" in _err_lower
+                    or "unsupported url" in _err_lower
+                    or "unable to extract" in _err_lower
+                    or "ie_key" in _err_lower
+                ):
+                    messagebox.showwarning(
+                        t("unsupported_site_title"),
+                        t("unsupported_site_msg"),
+                    )
         self._update_queue_label()
 
     def _create_card(self, task: DownloadTask) -> None:
@@ -677,9 +802,24 @@ class DownloadPage(tk.Frame):
             return
 
         self._empty_lbl.pack_forget()
-        card = DownloadCard(self._scroll.inner, task, on_delete=self._delete_task)
+        card = DownloadCard(
+            self._scroll.inner,
+            task,
+            on_delete=self._delete_task,
+            on_move=self._move_task,
+        )
         card.pack(fill="x", pady=(0, SPACING["sm"]))
         self._task_cards[task.task_id] = card
+
+    def _move_task(self, task_id: str, direction: int) -> None:
+        if downloader.reorder_queue(task_id, direction):
+            with downloader._lock:
+                q_order = list(downloader._queue)
+            for tid in q_order:
+                if tid in self._task_cards:
+                    card = self._task_cards[tid]
+                    card.pack_forget()
+                    card.pack(fill="x", pady=(0, SPACING["sm"]))
 
     def _delete_task(self, task_id: str) -> None:
         downloader.delete_task(task_id)
@@ -716,6 +856,312 @@ class DownloadPage(tk.Frame):
             settings.set("output_dir", d)
             self._out_lbl.configure(text=self._short_path(d))
 
+    def set_url(self, url: str) -> None:
+        """Populate the URL entry field and focus it."""
+        self._url_entry.set(url)
+        self._url_entry.focus()
+
+    def _open_format_picker(self) -> None:
+        url = self._url_entry.get().strip()
+        if not url:
+            return
+        if not self._validate_url(url):
+            return
+
+        self._pick_fmt_btn.configure_text(f"⏳ {t('status_checking')}")
+
+        def fetch() -> None:
+            try:
+                import yt_dlp
+
+                ydl_opts = {
+                    "skip_download": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "logger": YtDlpLogger(),
+                }
+                if settings.get("proxy"):
+                    ydl_opts["proxy"] = settings.get("proxy")
+                if settings.get("cookies_file"):
+                    ydl_opts["cookiefile"] = settings.get("cookies_file")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                self.after(0, lambda: self._show_format_modal(url, info))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(t("format_picker_title"), str(exc)[:250]))
+            finally:
+                self.after(0, lambda: self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}"))
+
+        threading.Thread(target=fetch, daemon=True, name="seal-fetch-fmt").start()
+
+    def _show_format_modal(self, url: str, info: dict) -> None:
+        formats = info.get("formats", [])
+        if not formats:
+            messagebox.showinfo(t("format_picker_title"), "No separate formats found.")
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title(t("format_picker_title"))
+        dlg.geometry("560x480")
+        dlg.configure(bg=P["bg_1"])
+        dlg.transient(self.winfo_toplevel())
+        dlg.grab_set()
+
+        pad = SPACING["md"]
+        tk.Label(
+            dlg,
+            text=f"🎯  {t('format_picker_title')}",
+            bg=P["bg_1"],
+            fg=P["accent"],
+            font=FONTS["heading2"],
+        ).pack(anchor="w", padx=pad, pady=(pad, 4))
+
+        title_str = (info.get("title") or url)[:70]
+        tk.Label(
+            dlg,
+            text=title_str,
+            bg=P["bg_1"],
+            fg=P["text_primary"],
+            font=FONTS["body"],
+        ).pack(anchor="w", padx=pad, pady=(0, pad))
+
+        scroll = SealScrollFrame(dlg)
+        scroll.pack(fill="both", expand=True, padx=pad, pady=(0, pad))
+
+        selected_fmt_id = tk.StringVar()
+        seen = set()
+
+        for f in formats:
+            fid = f.get("format_id", "")
+            ext = f.get("ext", "")
+            vcodec = f.get("vcodec", "none")
+            acodec = f.get("acodec", "none")
+            height = f.get("height")
+            fps = f.get("fps")
+            note = f.get("format_note", "")
+
+            if vcodec == "none" and acodec == "none":
+                continue
+
+            is_video = vcodec != "none"
+            if is_video:
+                desc = f"🎬 {height}p" if height else f"🎬 {note or ext}"
+                if fps:
+                    desc += f" {fps}fps"
+                desc += f" ({ext}, {vcodec[:8]})"
+            else:
+                desc = f"🎵 Audio only ({ext}, {acodec[:8]})"
+
+            key = (is_video, height, ext)
+            if key in seen:
+                continue
+            seen.add(key)
+
+            if not selected_fmt_id.get():
+                selected_fmt_id.set(fid)
+
+            row = tk.Frame(scroll.inner, bg=P["bg_2"], pady=4, padx=8)
+            row.pack(fill="x", pady=2)
+
+            rb = tk.Radiobutton(
+                row,
+                text=desc,
+                value=fid,
+                variable=selected_fmt_id,
+                bg=P["bg_2"],
+                fg=P["text_primary"],
+                selectcolor=P["bg_3"],
+                activebackground=P["bg_2"],
+                activeforeground=P["accent_light"],
+                font=FONTS["body_sm"],
+                anchor="w",
+            )
+            rb.pack(side="left", fill="x", expand=True)
+
+        btn_row = tk.Frame(dlg, bg=P["bg_1"])
+        btn_row.pack(fill="x", padx=pad, pady=(0, pad))
+
+        def _apply_choice() -> None:
+            chosen_id = selected_fmt_id.get()
+            chosen_fmt = next((f for f in formats if f.get("format_id") == chosen_id), None)
+            if chosen_fmt:
+                if chosen_fmt.get("vcodec") == "none":
+                    self._audio_var.set(True)
+                    self._audio_fmt_var.set(chosen_fmt.get("ext", "mp3"))
+                else:
+                    self._audio_var.set(False)
+                    h = chosen_fmt.get("height")
+                    if h:
+                        h_str = str(h)
+                        if h_str in ("2160", "1440", "1080", "720", "480", "360"):
+                            self._quality_var.set(h_str)
+            dlg.destroy()
+
+        SealButton(
+            btn_row,
+            text=t("btn_pick_format"),
+            variant="primary",
+            command=_apply_choice,
+            height=32,
+        ).pack(side="left")
+
+        SealButton(
+            btn_row,
+            text=t("btn_close"),
+            variant="ghost",
+            command=dlg.destroy,
+            height=32,
+        ).pack(side="right")
+
+    def _open_playlist_picker(self) -> None:
+        url = self._url_entry.get().strip()
+        if not url:
+            return
+        if not self._validate_url(url):
+            return
+
+        self._pick_pl_btn.configure_text(f"⏳ {t('status_checking')}")
+
+        def fetch() -> None:
+            try:
+                import yt_dlp
+
+                ydl_opts = {
+                    "extract_flat": "in_playlist",
+                    "skip_download": True,
+                    "quiet": True,
+                    "no_warnings": True,
+                    "logger": YtDlpLogger(),
+                }
+                if settings.get("proxy"):
+                    ydl_opts["proxy"] = settings.get("proxy")
+                if settings.get("cookies_file"):
+                    ydl_opts["cookiefile"] = settings.get("cookies_file")
+                with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                    info = ydl.extract_info(url, download=False)
+                self.after(0, lambda: self._show_playlist_modal(info))
+            except Exception as exc:  # noqa: BLE001
+                self.after(0, lambda: messagebox.showerror(t("playlist_picker_title"), str(exc)[:250]))
+            finally:
+                self.after(0, lambda: self._pick_pl_btn.configure_text(f"📑 {t('btn_select_items')}"))
+
+        threading.Thread(target=fetch, daemon=True, name="seal-fetch-pl").start()
+
+    def _show_playlist_modal(self, info: dict) -> None:
+        raw_entries = list(info.get("entries") or [])
+        if not raw_entries:
+            messagebox.showinfo(t("playlist_picker_title"), "No playlist items found.")
+            return
+
+        dlg = tk.Toplevel(self)
+        dlg.title(t("playlist_picker_title"))
+        dlg.geometry("640x540")
+        dlg.configure(bg=P["bg_1"])
+        dlg.transient(self.winfo_toplevel())
+        dlg.grab_set()
+
+        pad = SPACING["md"]
+        tk.Label(
+            dlg,
+            text=f"📑  {t('playlist_picker_title')}",
+            bg=P["bg_1"],
+            fg=P["accent"],
+            font=FONTS["heading2"],
+        ).pack(anchor="w", padx=pad, pady=(pad, 4))
+
+        pl_title = info.get("title") or "Playlist"
+        tk.Label(
+            dlg,
+            text=f"{pl_title} ({len(raw_entries)} items)",
+            bg=P["bg_1"],
+            fg=P["text_secondary"],
+            font=FONTS["body"],
+        ).pack(anchor="w", padx=pad, pady=(0, pad))
+
+        tool_row = tk.Frame(dlg, bg=P["bg_1"])
+        tool_row.pack(fill="x", padx=pad, pady=(0, SPACING["xs"]))
+
+        item_vars: list[tuple[dict, tk.BooleanVar]] = []
+
+        def _select_all() -> None:
+            for _, v in item_vars:
+                v.set(True)
+
+        def _deselect_all() -> None:
+            for _, v in item_vars:
+                v.set(False)
+
+        SealButton(tool_row, text=t("ctx_select_all"), variant="ghost", command=_select_all, height=26).pack(side="left")
+        SealButton(tool_row, text="Deselect All", variant="ghost", command=_deselect_all, height=26).pack(side="left", padx=(SPACING["sm"], 0))
+
+        scroll = SealScrollFrame(dlg)
+        scroll.pack(fill="both", expand=True, padx=pad, pady=(0, pad))
+
+        for idx, entry in enumerate(raw_entries, 1):
+            if not entry:
+                continue
+            e_title = entry.get("title") or entry.get("id") or f"Item {idx}"
+            dur = entry.get("duration")
+            dur_str = f" ({int(dur // 60)}:{int(dur % 60):02d})" if dur else ""
+
+            var = tk.BooleanVar(value=True)
+            item_vars.append((entry, var))
+
+            row = tk.Frame(scroll.inner, bg=P["bg_2"], pady=3, padx=6)
+            row.pack(fill="x", pady=1)
+
+            cb = tk.Checkbutton(
+                row,
+                text=f"{idx}. {e_title[:65]}{dur_str}",
+                variable=var,
+                bg=P["bg_2"],
+                fg=P["text_primary"],
+                selectcolor=P["bg_3"],
+                activebackground=P["bg_2"],
+                activeforeground=P["accent_light"],
+                font=FONTS["body_sm"],
+                anchor="w",
+            )
+            cb.pack(side="left", fill="x", expand=True)
+
+        btn_row = tk.Frame(dlg, bg=P["bg_1"])
+        btn_row.pack(fill="x", padx=pad, pady=(0, pad))
+
+        def _queue_selected() -> None:
+            prefs = self._collect_current_prefs()
+            queued_any = False
+            for entry, var in item_vars:
+                if var.get():
+                    e_url = entry.get("url") or entry.get("webpage_url") or entry.get("id")
+                    if e_url:
+                        if not e_url.startswith("http"):
+                            e_url = f"https://www.youtube.com/watch?v={e_url}"
+                        task_id = downloader.queue_download(e_url, prefs)
+                        t_obj = next((x for x in downloader.get_tasks() if x.task_id == task_id), None)
+                        if t_obj:
+                            self._create_card(t_obj)
+                        queued_any = True
+            if queued_any:
+                downloader.start_queue()
+                self._update_queue_label()
+            dlg.destroy()
+
+        SealButton(
+            btn_row,
+            text=t("btn_download_selected"),
+            variant="primary",
+            command=_queue_selected,
+            height=32,
+        ).pack(side="left")
+
+        SealButton(
+            btn_row,
+            text=t("btn_close"),
+            variant="ghost",
+            command=dlg.destroy,
+            height=32,
+        ).pack(side="right")
+
     def _retranslate(self) -> None:
         """Update texts in this page when language changes."""
         self._header_lbl.configure_text(t("page_download_title"))
@@ -730,6 +1176,19 @@ class DownloadPage(tk.Frame):
         self._clear_btn.configure_text(t("btn_clear_done"))
         self._empty_lbl.configure(text=t("empty_downloads"))
         self._url_entry.update_placeholder(t("url_placeholder"))
+        self._sub_src_lbl.configure_text(t("sub_source_label"))
+        self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}")
+        self._pick_pl_btn.configure_text(f"📑 {t('btn_select_items')}")
+        # Rebuild sub-source menu labels for current language
+        self._sub_src_menu["menu"].delete(0, "end")
+        for val in ("manual", "auto", "both"):
+            self._sub_src_menu["menu"].add_command(
+                label=t(f"sub_source_{val}"),
+                command=lambda v=val: self._sub_src_var.set(v),
+            )
+        self._sub_lang_hint_lbl.configure(
+            text=f"🌐 {t('label_sub_languages')}: {settings.get('subtitle_languages', 'en')}"
+        )
         self._update_queue_label()
 
         for card in self._task_cards.values():

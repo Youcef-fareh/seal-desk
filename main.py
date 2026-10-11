@@ -20,7 +20,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.core.i18n import set_language, t
 from src.core.settings import settings
 from src.ui.app_shell import AppShell
-from src.ui.theme import PALETTE as P
+from src.ui.theme import PALETTE as P, is_system_dark
 
 
 def _get_lock_path() -> Path:
@@ -91,8 +91,8 @@ def _set_window_icon(root: tk.Tk) -> None:
         root.iconbitmap(str(icon_path))
 
 
-def _apply_title_bar_dark(root: tk.Tk) -> None:
-    """On Windows 10/11, make the title bar dark."""
+def _apply_title_bar_theme(root: tk.Tk, dark: bool = True) -> None:
+    """On Windows 10/11, set title bar theme (dark or light)."""
     if sys.platform != "win32":
         return
     try:
@@ -100,10 +100,11 @@ def _apply_title_bar_dark(root: tk.Tk) -> None:
 
         hwnd = ctypes.windll.user32.GetParent(root.winfo_id())
         DWMWA_USE_IMMERSIVE_DARK_MODE = 20
+        mode = 1 if dark else 0
         ctypes.windll.dwmapi.DwmSetWindowAttribute(
             hwnd,
             DWMWA_USE_IMMERSIVE_DARK_MODE,
-            ctypes.byref(ctypes.c_int(1)),
+            ctypes.byref(ctypes.c_int(mode)),
             ctypes.sizeof(ctypes.c_int),
         )
     except Exception:  # noqa: BLE001
@@ -152,9 +153,11 @@ def main() -> None:
 
     _set_window_icon(root)
 
-    # Dark title bar on Windows
+    # Title bar on Windows
     root.update()
-    _apply_title_bar_dark(root)
+    theme_val = settings.get("theme", "dark")
+    is_dark = is_system_dark() if theme_val == "system" else (theme_val != "light")
+    _apply_title_bar_theme(root, is_dark)
 
     AppShell(root)
 

@@ -16,6 +16,9 @@ from pathlib import Path
 import yt_dlp
 
 from .ffmpeg_utils import get_ffmpeg_path, is_ffmpeg_available
+from .logger import YtDlpLogger, get_logger
+
+_log = get_logger()
 
 # ──────────────────────────────────────────────
 # State enums
@@ -51,8 +54,11 @@ class DownloadPreferences:
     embed_metadata: bool = True
     embed_thumbnail: bool = True
     embed_subtitles: bool = False
-
+    # "manual" = uploaded subs only, "auto" = auto-generated only, "both" = both sources
+    subtitle_source: str = "manual"
     subtitle_languages: str = "en"
+    extract_chapters: bool = False
+    sponsorblock_remove: bool = False  # Remove sponsor/intro/outro segments
     output_dir: str = str(Path.home() / "Downloads" / "Seal")
     output_template: str = "%(title).200B.%(ext)s"
     playlist_subdir: bool = True
@@ -144,7 +150,7 @@ class Downloader:
     Manages task lifecycles: Queued -> Fetching -> Downloading -> Paused / Completed.
     """
 
-    def __init__(self) -> None:
+    def __init__(self, max_concurrent_downloads: int = 1) -> None:
         self._tasks: dict[str, DownloadTask] = {}
         self._queue: list[str] = []  # Ordered task_ids
         self._threads: dict[str, threading.Thread] = {}
@@ -153,6 +159,11 @@ class Downloader:
         self._lock = threading.RLock()
         self._queue_running: bool = False
         self._active_task_id: str | None = None
+        # Semaphore controlling how many tasks may download simultaneously
+        self._max_concurrent = max(1, max_concurrent_downloads)
+        self._dl_semaphore = threading.Semaphore(self._max_concurrent)
+        # Track all currently active (running) task IDs
+        self._active_task_ids: set[str] = set()
 
         # Callbacks – set by the UI layer
         self.on_task_updated: Callable[[DownloadTask], None] = lambda _: None
@@ -227,6 +238,15 @@ class Downloader:
             self._process_next_in_queue()
 
         return task.task_id
+
+    def set_max_concurrent(self, n: int) -> None:
+        """Adjust the maximum number of simultaneous downloads at runtime."""
+        n = max(1, n)
+        if n == self._max_concurrent:
+            return
+        self._max_concurrent = n
+        # Replace semaphore — existing running tasks are unaffected
+        self._dl_semaphore = threading.Semaphore(n)
 
     def start_download(self, url: str, prefs: DownloadPreferences) -> str:
         """Queue and immediately trigger sequential download processing."""
@@ -357,6 +377,21 @@ class Downloader:
                 self._cancel_flags.pop(k, None)
                 self._pause_flags.pop(k, None)
 
+    def reorder_queue(self, task_id: str, direction: int) -> bool:
+        """
+        Move a queued task up (-1) or down (+1) in the queue.
+        Returns True if moved, False otherwise.
+        """
+        with self._lock:
+            if task_id not in self._queue:
+                return False
+            idx = self._queue.index(task_id)
+            new_idx = idx + direction
+            if 0 <= new_idx < len(self._queue):
+                self._queue[idx], self._queue[new_idx] = self._queue[new_idx], self._queue[idx]
+                return True
+            return False
+
     # ── Queue Runner ──────────────────────────
 
     def _process_next_in_queue(self) -> None:
@@ -365,25 +400,24 @@ class Downloader:
         with self._lock:
             if not self._queue_running:
                 return
-            if self._active_task_id:
-                # Still running a task
+
+            # With concurrent support we may launch multiple tasks
+            if len(self._active_task_ids) >= self._max_concurrent:
                 return
 
             # Find next QUEUED task in queue order
             next_task: DownloadTask | None = None
             for tid in self._queue:
                 t = self._tasks.get(tid)
-                if t and t.state == DownloadState.QUEUED:
+                if t and t.state == DownloadState.QUEUED and tid not in self._active_task_ids:
                     next_task = t
                     break
 
             if not next_task:
                 return
 
-            # Set _active_task_id BEFORE releasing the lock so that any concurrent
-            # call to _process_next_in_queue sees a non-None active ID and exits
-            # immediately (fixes R2: TOCTOU race with duplicate workers).
             self._active_task_id = next_task.task_id
+            self._active_task_ids.add(next_task.task_id)
             cancel_ev = threading.Event()
             pause_ev = threading.Event()
             self._cancel_flags[next_task.task_id] = cancel_ev
@@ -396,8 +430,6 @@ class Downloader:
                 name=f"seal-dl-{next_task.task_id[:8]}",
             )
             self._threads[next_task.task_id] = thread
-            # Start the thread while still holding the lock so _active_task_id
-            # is already committed before any other thread races in.
             thread.start()
 
     def _on_task_finished(self, task_id: str) -> None:
@@ -405,8 +437,10 @@ class Downloader:
         with self._lock:
             if self._active_task_id == task_id:
                 self._active_task_id = None
+            self._active_task_ids.discard(task_id)
 
         if self._queue_running:
+            # Potentially start the next task now that a slot has freed up
             self._process_next_in_queue()
 
     # ── Internal Worker ───────────────────────
@@ -531,6 +565,7 @@ class Downloader:
     ) -> None:
         task.state = DownloadState.FETCHING_INFO
         self._update_task(task)
+        _log.info("Starting download: %s", task.url)
 
         ydl_opts = self._build_opts(task, prefs, cancel_ev, pause_ev)
 
@@ -568,6 +603,7 @@ class Downloader:
                     cleaned = task.output_path[:-5]
                     if Path(cleaned).exists():
                         task.output_path = cleaned
+                _log.info("Completed: %s -> %s", task.url, task.output_path)
             self._update_task(task)
 
         except yt_dlp.utils.DownloadError as exc:
@@ -578,6 +614,7 @@ class Downloader:
             else:
                 task.state = DownloadState.ERROR
                 task.error = str(exc)
+                _log.error("DownloadError for %s: %s", task.url, exc)
             self._update_task(task)
         except Exception as exc:  # noqa: BLE001
             if pause_ev.is_set():
@@ -587,6 +624,7 @@ class Downloader:
             else:
                 task.state = DownloadState.ERROR
                 task.error = str(exc)
+                _log.exception("Unexpected error for %s", task.url)
             self._update_task(task)
         finally:
             self._on_task_finished(task.task_id)
@@ -657,6 +695,7 @@ class Downloader:
             "no_warnings": quiet,
             "ignoreerrors": False,
             "noplaylist": False,
+            "logger": YtDlpLogger(),
         }
         if prefs.proxy:
             opts["proxy"] = prefs.proxy
@@ -752,13 +791,42 @@ class Downloader:
                 if prefs.embed_metadata:
                     opts.setdefault("postprocessors", [])
                     opts["postprocessors"].append({"key": "FFmpegMetadata", "add_metadata": True})
-                if prefs.embed_subtitles:
-                    opts["writesubtitles"] = True
-                    opts["subtitleslangs"] = [
-                        s.strip() for s in prefs.subtitle_languages.split(",")
-                    ]
+                if prefs.extract_chapters:
+                    opts["addchapters"] = True
+                if prefs.sponsorblock_remove:
                     opts.setdefault("postprocessors", [])
-                    opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle"})
+                    opts["postprocessors"].append(
+                        {
+                            "key": "SponsorBlock",
+                            "categories": ["sponsor", "intro", "outro", "selfpromo", "filler"],
+                        }
+                    )
+                    opts["postprocessors"].append(
+                        {
+                            "key": "ModifyChapters",
+                            "remove_sponsor_segments": [
+                                "sponsor",
+                                "intro",
+                                "outro",
+                                "selfpromo",
+                                "filler",
+                            ],
+                        }
+                    )
+                if prefs.embed_subtitles:
+                    langs = [s.strip() for s in prefs.subtitle_languages.split(",") if s.strip()]
+                    if not langs:
+                        langs = ["en"]
+                    opts["subtitleslangs"] = langs
+                    # Choose subtitle source(s)
+                    if prefs.subtitle_source in ("manual", "both"):
+                        opts["writesubtitles"] = True
+                    if prefs.subtitle_source in ("auto", "both"):
+                        opts["writeautomaticsub"] = True
+                    # Convert to SRT for maximum compatibility
+                    opts["convertsubtitles"] = "srt"
+                    opts.setdefault("postprocessors", [])
+                    opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False})
             else:
                 # WITHOUT ffmpeg: yt-dlp CANNOT merge separate video and audio streams!
                 # If we used bestvideo+bestaudio, it would leave two unmerged files.

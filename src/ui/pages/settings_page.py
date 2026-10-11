@@ -5,7 +5,9 @@ Settings UI for download preferences, network, language (EN/AR), FFmpeg setup, a
 
 from __future__ import annotations
 
+import json
 import os
+import subprocess
 import sys
 import tkinter as tk
 import webbrowser
@@ -21,6 +23,7 @@ from ...core.i18n import (
     set_language,
     t,
 )
+from ...core.logger import LOG_FILE_PATH
 from ...core.settings import settings
 from ...core.updater import (
     CURRENT_VERSION,
@@ -216,17 +219,35 @@ class SettingsPage(tk.Frame):
 
         row_theme, lbl_theme = _row(sec_gen, t("label_theme"))
         self._trans_labels.append((lbl_theme, "label_theme"))
-        self._theme_var = tk.BooleanVar(value=settings.get("theme", "dark") != "light")
-        self._theme_switch = SealSwitch(
-            row_theme,
-            variable=self._theme_var,
-            command=lambda value: (
-                settings.set("theme", "dark" if value else "light"),
-                self._theme_callback() if self._theme_callback else None,
-            ),
+        self._theme_var = tk.StringVar(value=settings.get("theme", "dark"))
+
+        def _on_theme_picked(choice: str) -> None:
+            settings.set("theme", choice)
+            if self._theme_callback:
+                self._theme_callback()
+
+        self._theme_menu = tk.OptionMenu(
+            row_theme, self._theme_var, "dark", "light", "system", command=_on_theme_picked
         )
-        self._theme_switch.configure(bg=P["bg_1"])
-        self._theme_switch.pack(side="right")
+        self._theme_menu.configure(
+            bg=P["bg_2"],
+            fg=P["text_primary"],
+            activebackground=P["bg_3"],
+            activeforeground=P["text_primary"],
+            highlightthickness=0,
+            relief="flat",
+            font=FONTS["body"],
+            bd=0,
+        )
+        self._theme_menu["menu"].configure(
+            bg=P["bg_2"],
+            fg=P["text_primary"],
+            activebackground=P["accent"],
+            activeforeground="white",
+            font=FONTS["body"],
+            bd=0,
+        )
+        self._theme_menu.pack(side="right")
 
         # ── 2. Download Options ─────────────────────
         sec_dl_lbl, sec_dl = _section(inner, t("sec_download"))
@@ -341,10 +362,24 @@ class SettingsPage(tk.Frame):
         _, lbl_es = _toggle_row(sec_post, t("label_embed_subtitles"), "embed_subtitles")
         self._trans_labels.append((lbl_es, "label_embed_subtitles"))
 
+        _, lbl_ss, _ = _dropdown_row(
+            sec_post,
+            t("label_sub_source"),
+            "subtitle_source",
+            ["manual", "auto", "both"],
+        )
+        self._trans_labels.append((lbl_ss, "label_sub_source"))
+
         _, lbl_sl = _entry_row(
             sec_post, t("label_sub_languages"), "subtitle_languages", "en,ar,fr,de"
         )
         self._trans_labels.append((lbl_sl, "label_sub_languages"))
+
+        _, lbl_ch = _toggle_row(sec_post, t("label_extract_chapters"), "extract_chapters")
+        self._trans_labels.append((lbl_ch, "label_extract_chapters"))
+
+        _, lbl_sb = _toggle_row(sec_post, t("label_sponsorblock"), "sponsorblock_remove")
+        self._trans_labels.append((lbl_sb, "label_sponsorblock"))
 
         # ── 6. Network ──────────────────────────────
         sec_net_lbl, sec_net = _section(inner, t("sec_network"))
@@ -358,6 +393,18 @@ class SettingsPage(tk.Frame):
 
         _, lbl_ar = _toggle_row(sec_net, t("label_aria2c"), "use_aria2c")
         self._trans_labels.append((lbl_ar, "label_aria2c"))
+
+        _, lbl_conc = _entry_row(sec_net, t("label_concurrent"), "concurrent_fragments", "4")
+        self._trans_labels.append((lbl_conc, "label_concurrent"))
+
+        _, lbl_maxc, _ = _dropdown_row(
+            sec_net,
+            t("label_max_concurrent"),
+            "max_concurrent_downloads",
+            ["1", "2", "3", "4", "5"],
+            on_change_extra=lambda val: settings.set("max_concurrent_downloads", int(val)),
+        )
+        self._trans_labels.append((lbl_maxc, "label_max_concurrent"))
 
         # Cookies
         row_c, lbl_ck = _row(sec_net, t("label_cookies"))
@@ -377,7 +424,66 @@ class SettingsPage(tk.Frame):
         btn_ck_browse.pack(side="right")
         self._trans_buttons.append((btn_ck_browse, "browse"))
 
-        # ── 7. App Updates & Auto-Updater ───────────
+        # ── 7. Behaviour ────────────────────────────
+        sec_beh_lbl, sec_beh = _section(inner, t("sec_behaviour"))
+        self._trans_labels.append((sec_beh_lbl, "sec_behaviour"))
+
+        _, lbl_dn = _toggle_row(sec_beh, t("label_desktop_notifications"), "desktop_notifications")
+        self._trans_labels.append((lbl_dn, "label_desktop_notifications"))
+
+        _, lbl_cm = _toggle_row(sec_beh, t("label_clipboard_monitor"), "clipboard_monitor")
+        self._trans_labels.append((lbl_cm, "label_clipboard_monitor"))
+
+        _, lbl_api = _toggle_row(sec_beh, t("label_api_server"), "api_server_enabled")
+        self._trans_labels.append((lbl_api, "label_api_server"))
+
+        # ── 8. Advanced ─────────────────────────────
+        sec_adv_lbl, sec_adv = _section(inner, t("sec_advanced"))
+        self._trans_labels.append((sec_adv_lbl, "sec_advanced"))
+
+        # Log file
+        row_log, lbl_log = _row(sec_adv, t("label_log_file"))
+        self._trans_labels.append((lbl_log, "label_log_file"))
+
+        self._log_lbl = tk.Label(
+            row_log,
+            text=self._short(str(LOG_FILE_PATH)),
+            bg=P["bg_1"],
+            fg=P["text_secondary"],
+            font=FONTS["body_sm"],
+        )
+        self._log_lbl.pack(side="right", padx=(0, SPACING["sm"]))
+        btn_log = SealButton(
+            row_log, text=t("btn_open_log"), variant="secondary", command=self._open_log, height=30
+        )
+        btn_log.pack(side="right")
+        self._trans_buttons.append((btn_log, "btn_open_log"))
+
+        # Backup & Restore
+        row_backup = tk.Frame(sec_adv, bg=P["bg_1"])
+        row_backup.pack(fill="x", pady=SPACING["xs"])
+
+        btn_exp = SealButton(
+            row_backup,
+            text=t("btn_export_settings"),
+            variant="secondary",
+            command=self._export_settings,
+            height=30,
+        )
+        btn_exp.pack(side="left")
+        self._trans_buttons.append((btn_exp, "btn_export_settings"))
+
+        btn_imp = SealButton(
+            row_backup,
+            text=t("btn_import_settings"),
+            variant="secondary",
+            command=self._import_settings,
+            height=30,
+        )
+        btn_imp.pack(side="left", padx=(SPACING["sm"], 0))
+        self._trans_buttons.append((btn_imp, "btn_import_settings"))
+
+        # ── 9. App Updates & Auto-Updater ───────────
         sec_up_lbl, sec_up = _section(inner, t("sec_updates"))
         self._trans_labels.append((sec_up_lbl, "sec_updates"))
 
@@ -644,6 +750,44 @@ class SettingsPage(tk.Frame):
             )
 
         update_ytdlp(done)
+
+    def _open_log(self) -> None:
+        if not LOG_FILE_PATH.exists():
+            LOG_FILE_PATH.touch()
+        if sys.platform == "win32":
+            os.startfile(str(LOG_FILE_PATH))
+        elif sys.platform == "darwin":
+            subprocess.run(["open", str(LOG_FILE_PATH)])
+        else:
+            subprocess.run(["xdg-open", str(LOG_FILE_PATH)])
+
+    def _export_settings(self) -> None:
+        f = filedialog.asksaveasfilename(
+            defaultextension=".json",
+            filetypes=[("JSON file", "*.json")],
+            initialfile="seal_settings_backup.json",
+        )
+        if f:
+            try:
+                with open(f, "w", encoding="utf-8") as fp:
+                    json.dump(settings._data, fp, indent=2, ensure_ascii=False)
+                messagebox.showinfo(t("settings_title"), t("settings_exported"))
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showerror("Export error", str(exc))
+
+    def _import_settings(self) -> None:
+        f = filedialog.askopenfilename(
+            filetypes=[("JSON file", "*.json"), ("All files", "*.*")]
+        )
+        if f:
+            try:
+                with open(f, "r", encoding="utf-8") as fp:
+                    loaded = json.load(fp)
+                if isinstance(loaded, dict):
+                    settings.update(loaded)
+                    messagebox.showinfo(t("settings_title"), t("settings_imported"))
+            except Exception as exc:  # noqa: BLE001
+                messagebox.showerror("Import error", t("settings_import_error", error=str(exc)))
 
     def _retranslate(self) -> None:
         """Dynamically refresh labels when language is changed."""

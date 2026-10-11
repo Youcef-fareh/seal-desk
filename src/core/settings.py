@@ -42,13 +42,24 @@ DEFAULTS: dict[str, Any] = {
     "embed_metadata": True,
     "embed_thumbnail": True,
     "embed_subtitles": False,
+    # "manual" | "auto" | "both"
+    "subtitle_source": "manual",
     "subtitle_languages": "en",
+    "extract_chapters": False,
+    "sponsorblock_remove": False,
     # Network
     "proxy": "",
     "rate_limit": "",
     "concurrent_fragments": 4,
+    "max_concurrent_downloads": 1,
     "use_aria2c": False,
     "cookies_file": "",
+    # Behaviour
+    "desktop_notifications": True,
+    "clipboard_monitor": False,
+    # Browser Extension API Server
+    "api_server_enabled": True,
+    "api_server_port": 48123,
     # Updates
     "auto_check_updates": True,
     # UI

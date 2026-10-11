@@ -74,6 +74,26 @@ LIGHT_OVERRIDES = {
 }
 
 
+import sys
+
+def is_system_dark() -> bool:
+    """Detect whether OS is in dark mode (Windows / macOS fallback)."""
+    if sys.platform == "win32":
+        try:
+            import winreg
+
+            key = winreg.OpenKey(
+                winreg.HKEY_CURRENT_USER,
+                r"Software\Microsoft\Windows\CurrentVersion\Themes\Personalize",
+            )
+            val, _ = winreg.QueryValueEx(key, "AppsUseLightTheme")
+            winreg.CloseKey(key)
+            return val == 0
+        except Exception:  # noqa: BLE001
+            return True
+    return True
+
+
 def get_palette(dark: bool = True) -> dict[str, str]:
     p = dict(BASE_PALETTE)
     if not dark:
@@ -81,7 +101,13 @@ def get_palette(dark: bool = True) -> dict[str, str]:
     return p
 
 
-def apply_theme(dark: bool = True) -> None:
+def apply_theme(mode: str | bool = "dark") -> None:
+    if isinstance(mode, bool):
+        dark = mode
+    elif mode == "system":
+        dark = is_system_dark()
+    else:
+        dark = (mode != "light")
     PALETTE.clear()
     PALETTE.update(get_palette(dark))
 

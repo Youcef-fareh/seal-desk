@@ -20,9 +20,15 @@ from ..widgets import SealButton, SealEntry, SealLabel, SealScrollFrame
 
 
 class HistoryRow(tk.Frame):
-    def __init__(self, parent: tk.Widget, entry: dict) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        entry: dict,
+        on_redownload: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__(parent, bg=P["bg_1"], padx=SPACING["md"], pady=SPACING["sm"])
         self._entry = entry
+        self._on_redownload = on_redownload
         self._build()
 
     def _build(self) -> None:
@@ -40,6 +46,16 @@ class HistoryRow(tk.Frame):
             font=FONTS["body"],
             anchor="w",
         ).pack(side="left", fill="x", expand=True)
+
+        if self._on_redownload and self._entry.get("url"):
+            SealButton(
+                row,
+                text="↻",
+                variant="ghost",
+                command=lambda: self._on_redownload(self._entry.get("url", "")),
+                height=28,
+                width=28,
+            ).pack(side="right", padx=(4, 0))
 
         if self._entry.get("output") and os.path.exists(self._entry["output"]):
             SealButton(
@@ -92,9 +108,15 @@ class HistoryRow(tk.Frame):
 
 
 class HistoryPage(tk.Frame):
-    def __init__(self, parent: tk.Widget, nav_callback: Callable) -> None:
+    def __init__(
+        self,
+        parent: tk.Widget,
+        nav_callback: Callable,
+        redownload_callback: Callable[[str], None] | None = None,
+    ) -> None:
         super().__init__(parent, bg=P["bg_0"])
         self._nav = nav_callback
+        self._redownload = redownload_callback
         self._all_entries: list[dict] = []
         add_language_listener(self._retranslate)
 
@@ -155,7 +177,7 @@ class HistoryPage(tk.Frame):
             return
 
         for entry in entries:
-            HistoryRow(self._scroll.inner, entry).pack(fill="x")
+            HistoryRow(self._scroll.inner, entry, on_redownload=self._redownload).pack(fill="x")
 
     def _filter(self) -> None:
         q = self._search_entry.get().lower()

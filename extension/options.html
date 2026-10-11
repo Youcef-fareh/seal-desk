@@ -1,0 +1,196 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Seal Desktop Companion — Options</title>
+  <link rel="stylesheet" href="options.css">
+</head>
+<body>
+  <div class="settings-layout">
+    <!-- Sidebar -->
+    <aside class="sidebar">
+      <div class="sidebar-brand">
+        <img src="icons/icon48.png" alt="Seal" class="brand-icon">
+        <div class="brand-text">
+          <span class="brand-title">Seal Desktop</span>
+          <span class="brand-sub">Extension Settings</span>
+        </div>
+      </div>
+
+      <nav class="sidebar-nav">
+        <a href="#connection" class="nav-link active">🔗 Connection</a>
+        <a href="#defaults" class="nav-link">⚙️ Defaults</a>
+        <a href="#integration" class="nav-link">🌐 Browser Integration</a>
+        <a href="#about" class="nav-link">ℹ️ About</a>
+      </nav>
+
+      <div class="sidebar-footer">
+        <span class="badge">Version 1.0.0</span>
+      </div>
+    </aside>
+
+    <!-- Main Content -->
+    <main class="content">
+      <header class="content-header">
+        <h1>Companion Settings</h1>
+        <p>Configure how your browser extension communicates with Seal Desktop.</p>
+      </header>
+
+      <!-- 1. Connection Section -->
+      <section class="settings-section" id="connection">
+        <h2 class="section-title">🔗 Local App Connection</h2>
+        <div class="settings-card">
+          <div class="field-row">
+            <div class="field-info">
+              <label for="server-url" class="field-label">API Server URL</label>
+              <p class="field-desc">Address where Seal Desktop listens for incoming extension commands (default: <code>http://127.0.0.1:48123</code>).</p>
+            </div>
+            <div class="field-control">
+              <input type="text" id="server-url" class="text-input" placeholder="http://127.0.0.1:48123" />
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="connection-status-box">
+            <div class="conn-info">
+              <span class="conn-dot" id="conn-dot"></span>
+              <span class="conn-text" id="conn-status-text">Not tested yet</span>
+            </div>
+            <button class="btn btn-secondary" id="btn-test-connection">Test Connection</button>
+          </div>
+        </div>
+      </section>
+
+      <!-- 2. Defaults Section -->
+      <section class="settings-section" id="defaults">
+        <h2 class="section-title">⚙️ Download Defaults</h2>
+        <div class="settings-card">
+          <div class="field-row">
+            <div class="field-info">
+              <label for="default-mode" class="field-label">Default Mode</label>
+              <p class="field-desc">Default media type selected when opening the extension popup.</p>
+            </div>
+            <div class="field-control">
+              <select id="default-mode" class="select-input">
+                <option value="video">🎬 Video Download</option>
+                <option value="audio">🎵 Audio Extraction</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field-row">
+            <div class="field-info">
+              <label for="default-quality" class="field-label">Default Video Quality</label>
+              <p class="field-desc">Preferred resolution when downloading videos.</p>
+            </div>
+            <div class="field-control">
+              <select id="default-quality" class="select-input">
+                <option value="best">⚡ Best Quality (Automatic)</option>
+                <option value="2160">4K (2160p)</option>
+                <option value="1440">2K QHD (1440p)</option>
+                <option value="1080">Full HD (1080p)</option>
+                <option value="720">HD (720p)</option>
+                <option value="480">Standard (480p)</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field-row">
+            <div class="field-info">
+              <label for="default-audio-format" class="field-label">Default Audio Format</label>
+              <p class="field-desc">Container format for audio extraction.</p>
+            </div>
+            <div class="field-control">
+              <select id="default-audio-format" class="select-input">
+                <option value="mp3">MP3 (320 kbps)</option>
+                <option value="m4a">M4A / AAC</option>
+                <option value="opus">OPUS</option>
+                <option value="flac">FLAC (Lossless)</option>
+                <option value="wav">WAV</option>
+              </select>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field-row toggle-row">
+            <div class="field-info">
+              <label for="embed-metadata" class="field-label">Embed Thumbnails & Tags</label>
+              <p class="field-desc">Save album cover art and song/video metadata directly into media files.</p>
+            </div>
+            <div class="field-control">
+              <label class="switch">
+                <input type="checkbox" id="embed-metadata" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field-row toggle-row">
+            <div class="field-info">
+              <label for="embed-subtitles" class="field-label">Embed Subtitles</label>
+              <p class="field-desc">Download and embed available video subtitles automatically.</p>
+            </div>
+            <div class="field-control">
+              <label class="switch">
+                <input type="checkbox" id="embed-subtitles" />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- 3. Browser Integration -->
+      <section class="settings-section" id="integration">
+        <h2 class="section-title">🌐 Browser Integration</h2>
+        <div class="settings-card">
+          <div class="field-row toggle-row">
+            <div class="field-info">
+              <label for="enable-context-menu" class="field-label">Right-Click Context Menu</label>
+              <p class="field-desc">Show "Download with Seal" when right-clicking videos, links, and pages.</p>
+            </div>
+            <div class="field-control">
+              <label class="switch">
+                <input type="checkbox" id="enable-context-menu" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+
+          <div class="field-divider"></div>
+
+          <div class="field-row toggle-row">
+            <div class="field-info">
+              <label for="enable-page-button" class="field-label">In-Page Video Download Buttons</label>
+              <p class="field-desc">Inject floating download badges near HTML5 and YouTube video players.</p>
+            </div>
+            <div class="field-control">
+              <label class="switch">
+                <input type="checkbox" id="enable-page-button" checked />
+                <span class="slider"></span>
+              </label>
+            </div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Save Actions -->
+      <div class="save-bar">
+        <button class="btn btn-primary" id="btn-save">Save Settings</button>
+        <span class="save-status" id="save-status" style="display: none;">✅ Settings saved successfully!</span>
+      </div>
+    </main>
+  </div>
+
+  <script src="options.js"></script>
+</body>
+</html>

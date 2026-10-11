@@ -8,7 +8,10 @@ from __future__ import annotations
 import tkinter as tk
 import webbrowser
 from collections.abc import Callable
+from tkinter import messagebox
 
+from ..core.api_server import ApiServer
+from ..core.clipboard_monitor import ClipboardMonitor
 from ..core.i18n import add_language_listener, remove_language_listener, set_language, t
 from ..core.settings import settings
 from ..core.updater import CURRENT_VERSION, AppReleaseInfo, check_app_update
@@ -114,15 +117,33 @@ class AppShell(tk.Frame):
 
     def __init__(self, root: tk.Tk) -> None:
         super().__init__(root, bg=P["bg_0"])
+        self._root = root
         self.pack(fill="both", expand=True)
         self._current_page = "download"
         self._nav_items: dict[str, NavItem] = {}
         self._pages: dict[str, tk.Frame] = {}
 
-        # Initialize language from settings
+        # Initialize language and theme from settings
         set_language(settings.get("language", "en"))
-        apply_theme(settings.get("theme", "dark") != "light")
+        apply_theme(settings.get("theme", "dark"))
         add_language_listener(self._retranslate)
+
+        # Clipboard Monitor
+        self._clipboard_monitor = ClipboardMonitor(root, self._on_clipboard_url_detected)
+        if settings.get("clipboard_monitor", False):
+            self._clipboard_monitor.start()
+
+        # Browser Extension Companion API Server
+        self._api_server: ApiServer | None = None
+        if settings.get("api_server_enabled", True):
+            port = int(settings.get("api_server_port", 48123))
+            self._api_server = ApiServer(port=port, on_task_added=self._on_remote_task_added)
+            self._api_server.start()
+
+        # Global keyboard shortcuts
+        root.bind("<Control-Return>", lambda _: self._trigger_download_shortcut())
+        root.bind("<Control-v>", lambda _: self._on_paste_shortcut())
+        root.bind("<Control-V>", lambda _: self._on_paste_shortcut())
 
         self._build_sidebar()
         self._build_content()
@@ -133,11 +154,14 @@ class AppShell(tk.Frame):
             self.after(3000, self._check_startup_update)
 
     def destroy(self) -> None:
+        if self._api_server:
+            self._api_server.stop()
+        self._clipboard_monitor.stop()
         remove_language_listener(self._retranslate)
         super().destroy()
 
     def _apply_theme(self) -> None:
-        apply_theme(settings.get("theme", "dark") != "light")
+        apply_theme(settings.get("theme", "dark"))
         for page in list(self._pages.values()):
             if page.winfo_exists():
                 page.destroy()
@@ -279,11 +303,62 @@ class AppShell(tk.Frame):
             }[page_id]
             if page_id == "settings":
                 page = page_cls(self._content, self._navigate, theme_callback=self._apply_theme)
+            elif page_id == "history":
+                page = page_cls(self._content, self._navigate, redownload_callback=self._on_redownload_from_history)
             else:
                 page = page_cls(self._content, self._navigate)
             self._pages[page_id] = page
 
         self._pages[page_id].pack(fill="both", expand=True)
+
+    def _on_clipboard_url_detected(self, url: str) -> None:
+        if not settings.get("clipboard_monitor", False):
+            return
+        if messagebox.askyesno(
+            t("clipboard_detected_title"),
+            t("clipboard_detected_msg", url=url),
+            parent=self._root,
+        ):
+            self._navigate("download")
+            p = self._pages.get("download")
+            if p and hasattr(p, "set_url"):
+                p.set_url(url)
+
+    def _on_remote_task_added(self, task_id: str) -> None:
+        def _apply() -> None:
+            self._navigate("download")
+            try:
+                self._root.deiconify()
+                self._root.lift()
+            except Exception:
+                pass
+
+        self._root.after(0, _apply)
+
+    def _on_redownload_from_history(self, url: str) -> None:
+        self._navigate("download")
+        p = self._pages.get("download")
+        if p and hasattr(p, "set_url"):
+            p.set_url(url)
+
+    def _trigger_download_shortcut(self) -> None:
+        if self._current_page == "download":
+            p = self._pages.get("download")
+            if p and hasattr(p, "_download_now"):
+                p._download_now()
+
+    def _on_paste_shortcut(self) -> None:
+        focused = self._root.focus_get()
+        if not isinstance(focused, (tk.Entry, tk.Text)):
+            try:
+                txt = self._root.clipboard_get().strip()
+                if txt.startswith("http"):
+                    self._navigate("download")
+                    p = self._pages.get("download")
+                    if p and hasattr(p, "set_url"):
+                        p.set_url(txt)
+            except Exception:  # noqa: BLE001
+                pass
 
     def _check_startup_update(self) -> None:
         def on_result(info: AppReleaseInfo | None, error: str | None) -> None:

@@ -29,6 +29,7 @@ Thumbs.db
 
 # App config (user-specific)
 *.json
+!extension/manifest.json
 
 # Test
 .pytest_cache/

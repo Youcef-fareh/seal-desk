@@ -4,3 +4,4 @@ requests>=2.31.0
 platformdirs>=4.1.0
 Pillow>=10.2.0
 imageio-ffmpeg>=0.5.1  # Bundles FFmpeg binaries for all platforms
+winotify>=1.1.0        # Windows 10/11 native toast notifications

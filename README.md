@@ -39,11 +39,12 @@ Download from **1000+ sites** including YouTube, SoundCloud, Twitch, Twitter/X, 
 | 🔁 **Retry Failed Downloads** | Retry failed tasks directly from the download queue |
 | 🌐 **Broad Site Support** | Facebook and 1000+ other sites supported through yt-dlp |
 | ⚙ **Flexible Settings** | Output templates, rate limiting, cookies file, FFmpeg auto-installer |
+| 🧩 **Browser Extension** | Official companion for Chrome, Edge, Firefox & Brave — 1-click send from browser to app |
 
 ## 🖥 Supported Platforms
 
 | OS | Installer | Portable |
-|----|-----------|---------|
+|----|-----------|---------| 
 | Windows 10/11 | ✅ `.exe` installer | ✅ ZIP |
 | macOS 12+ | ✅ `.dmg` disk image | ✅ `.app` |
 | Linux (x86_64) | ✅ AppImage | ✅ tar.gz |
@@ -67,6 +68,37 @@ chmod +x SealDesktop-*-linux-x86_64.AppImage
   - Windows: `choco install ffmpeg` or [download](https://ffmpeg.org/download.html)
   - macOS: `brew install ffmpeg`
   - Linux: `sudo apt install ffmpeg`
+
+## 🧩 Browser Extension
+
+Seal Desktop ships with an official companion browser extension (`extension/`) that lets you send any video or audio link from your browser directly to the app with one click.
+
+### Features
+- **Auto-detects videos on any page** — a floating overlay appears directly on the video player when you hover. No need to copy links.
+- **⚡ Download Now / ➕ Add to Queue buttons** appear right on the video on YouTube, Twitter/X, TikTok, Reddit, Twitch, Vimeo, Facebook, and any HTML5 `<video>`
+- **Right-click context menu** on any link, video, or page: *Download Video*, *Download Audio*, or *Add to Queue*
+- **Keyboard shortcut** `Alt + Shift + D` to instantly send the current tab
+- **Live status indicator** showing whether Seal Desktop is running and queue count
+- **Zero telemetry** — all communication stays local (`127.0.0.1:48123`)
+
+### How the companion server works
+
+When Seal Desktop launches, it starts a lightweight local REST API on `http://127.0.0.1:48123`. The browser extension communicates with it over this private loopback address. You can toggle the server under **Settings → Behaviour → Browser extension companion server**.
+
+### Installing the Extension
+
+**Chrome / Edge / Brave / Opera:**
+1. Open `chrome://extensions` (or your browser's equivalent)
+2. Enable **Developer mode** (top-right toggle)
+3. Click **Load unpacked** and select the `extension/` folder in this repository
+4. Pin the 🦭 Seal icon to your toolbar
+
+**Firefox:**
+1. Go to `about:debugging#/runtime/this-firefox`
+2. Click **Load Temporary Add-on...**
+3. Select `extension/manifest.json`
+
+> See [`extension/README.md`](extension/README.md) for full details and configuration options.
 
 ## 🛠 Running from Source
 
@@ -115,13 +147,24 @@ seal-desktop/
 ├── SealDesktop.spec                # PyInstaller build spec
 ├── requirements.txt                # Runtime dependencies
 ├── requirements-build.txt          # Build-time dependencies
+├── extension/                      # Browser extension (Chrome, Edge, Firefox, Brave)
+│   ├── manifest.json               # Extension manifest (Manifest V3)
+│   ├── popup.html / popup.js       # Extension popup UI & logic
+│   ├── background.js               # Service worker (context menus, shortcuts)
+│   ├── content.js / content.css    # In-page video download buttons
+│   ├── options.html / options.js   # Extension settings page
+│   └── icons/                      # Extension icons (16, 32, 48, 128px)
 ├── installer/
 │   └── windows.nsi                 # NSIS Windows installer script
 ├── assets/
 │   └── icon.ico                    # App icon
 ├── src/
 │   ├── core/
+│   │   ├── api_server.py           # Local REST API for browser extension companion
+│   │   ├── clipboard_monitor.py    # Clipboard URL watcher
 │   │   ├── downloader.py           # yt-dlp wrapper & state machine
+│   │   ├── logger.py               # Rotating file logger
+│   │   ├── notifications.py        # Desktop notification helper
 │   │   ├── settings.py             # Persistent settings manager
 │   │   └── updater.py              # App & yt-dlp update checker
 │   └── ui/
@@ -133,7 +176,8 @@ seal-desktop/
 │           ├── history_page.py     # Download history
 │           └── settings_page.py    # Settings panel
 ├── tests/
-│   └── test_downloader.py          # Unit tests
+│   ├── test_downloader.py          # Downloader unit tests
+│   └── test_api_server.py          # Companion API server tests
 └── .github/
     └── workflows/
         ├── build-release.yml       # Build + publish releases
