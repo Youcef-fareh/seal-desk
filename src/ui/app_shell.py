@@ -304,7 +304,11 @@ class AppShell(tk.Frame):
             if page_id == "settings":
                 page = page_cls(self._content, self._navigate, theme_callback=self._apply_theme)
             elif page_id == "history":
-                page = page_cls(self._content, self._navigate, redownload_callback=self._on_redownload_from_history)
+                page = page_cls(
+                    self._content,
+                    self._navigate,
+                    redownload_callback=self._on_redownload_from_history,
+                )
             else:
                 page = page_cls(self._content, self._navigate)
             self._pages[page_id] = page

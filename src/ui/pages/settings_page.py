@@ -776,9 +776,7 @@ class SettingsPage(tk.Frame):
                 messagebox.showerror("Export error", str(exc))
 
     def _import_settings(self) -> None:
-        f = filedialog.askopenfilename(
-            filetypes=[("JSON file", "*.json"), ("All files", "*.*")]
-        )
+        f = filedialog.askopenfilename(filetypes=[("JSON file", "*.json"), ("All files", "*.*")])
         if f:
             try:
                 with open(f, encoding="utf-8") as fp:

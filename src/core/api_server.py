@@ -31,7 +31,9 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
     def _send_cors_headers(self) -> None:
         self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Access-Control-Allow-Methods", "GET, POST, OPTIONS")
-        self.send_header("Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With")
+        self.send_header(
+            "Access-Control-Allow-Headers", "Content-Type, Authorization, X-Requested-With"
+        )
 
     def _send_json_response(self, code: int, data: dict[str, Any]) -> None:
         body = json.dumps(data, ensure_ascii=False).encode("utf-8")
@@ -52,12 +54,15 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
         path = parsed.path.rstrip("/")
 
         if path in ("/api/ping", "/ping"):
-            self._send_json_response(200, {
-                "status": "ok",
-                "app": "Seal Desktop",
-                "version": "1.4.0",
-                "message": "Seal Desktop companion server is active",
-            })
+            self._send_json_response(
+                200,
+                {
+                    "status": "ok",
+                    "app": "Seal Desktop",
+                    "version": "1.4.0",
+                    "message": "Seal Desktop companion server is active",
+                },
+            )
             return
 
         if path in ("/api/status", "/status"):
@@ -65,17 +70,21 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
             # DownloadState uses auto() ints — compare by name, not value string
             q_count = sum(1 for t in tasks if t.state.name == "QUEUED")
             active_count = sum(
-                1 for t in tasks
+                1
+                for t in tasks
                 if t.state.name in ("DOWNLOADING", "DOWNLOADING_PLAYLIST", "FETCHING_INFO")
             )
-            self._send_json_response(200, {
-                "status": "ok",
-                "app": "Seal Desktop",
-                "queue_running": downloader.is_queue_running(),
-                "total_tasks": len(tasks),
-                "queued_count": q_count,
-                "active_count": active_count,
-            })
+            self._send_json_response(
+                200,
+                {
+                    "status": "ok",
+                    "app": "Seal Desktop",
+                    "queue_running": downloader.is_queue_running(),
+                    "total_tasks": len(tasks),
+                    "queued_count": q_count,
+                    "active_count": active_count,
+                },
+            )
             return
 
         self._send_json_response(404, {"status": "error", "message": "Endpoint not found"})
@@ -91,26 +100,37 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
                 raw_data = self.rfile.read(length).decode("utf-8") if length > 0 else "{}"
                 payload = json.loads(raw_data) if raw_data.strip() else {}
             except (ValueError, UnicodeDecodeError, json.JSONDecodeError) as e:
-                self._send_json_response(400, {"status": "error", "message": f"Invalid request body: {e}"})
+                self._send_json_response(
+                    400, {"status": "error", "message": f"Invalid request body: {e}"}
+                )
                 return
             except Exception as e:
-                self._send_json_response(500, {"status": "error", "message": f"Server read error: {e}"})
+                self._send_json_response(
+                    500, {"status": "error", "message": f"Server read error: {e}"}
+                )
                 return
 
             url = (payload.get("url") or "").strip()
             if not url or not (url.startswith("http://") or url.startswith("https://")):
-                self._send_json_response(400, {"status": "error", "message": "Invalid or missing 'url' parameter"})
+                self._send_json_response(
+                    400, {"status": "error", "message": "Invalid or missing 'url' parameter"}
+                )
                 return
 
             # Construct preferences, combining request payload with user settings
             extract_audio = bool(payload.get("extract_audio", payload.get("is_audio", False)))
             audio_format = str(payload.get("audio_format") or settings.get("audio_format", "mp3"))
             video_quality = str(payload.get("video_quality", payload.get("quality", "best")))
-            video_container = str(payload.get("video_container") or settings.get("video_container", "mp4"))
-            embed_subtitles = bool(payload.get("embed_subtitles", settings.get("embed_subtitles", False)))
+            video_container = str(
+                payload.get("video_container") or settings.get("video_container", "mp4")
+            )
+            embed_subtitles = bool(
+                payload.get("embed_subtitles", settings.get("embed_subtitles", False))
+            )
 
             # Safely resolve output_dir — settings.get may return None if key not set yet
             from pathlib import Path as _Path
+
             _default_dir = str(_Path.home() / "Downloads" / "Seal")
             _output_dir = settings.get("output_dir") or _default_dir
 
@@ -149,12 +169,17 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
                 desc = f"Received from browser: {title[:40] if title else url[:40]}"
                 send_notification("Seal Desktop Companion", desc)
 
-            self._send_json_response(200, {
-                "status": "success",
-                "task_id": task_id,
-                "auto_start": auto_start,
-                "message": "Task queued successfully" if not auto_start else "Download started successfully",
-            })
+            self._send_json_response(
+                200,
+                {
+                    "status": "success",
+                    "task_id": task_id,
+                    "auto_start": auto_start,
+                    "message": "Task queued successfully"
+                    if not auto_start
+                    else "Download started successfully",
+                },
+            )
             return
 
         self._send_json_response(404, {"status": "error", "message": "Endpoint not found"})
@@ -192,7 +217,9 @@ class ApiServer:
             get_logger().info(f"Extension API server started on http://{self.host}:{self.port}")
             return True
         except OSError as exc:
-            get_logger().warning(f"Could not bind API server to {self.host}:{self.port} (already in use?): {exc}")
+            get_logger().warning(
+                f"Could not bind API server to {self.host}:{self.port} (already in use?): {exc}"
+            )
             self._running = False
             return False
 

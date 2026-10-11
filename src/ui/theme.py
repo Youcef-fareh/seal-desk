@@ -107,7 +107,7 @@ def apply_theme(mode: str | bool = "dark") -> None:
     elif mode == "system":
         dark = is_system_dark()
     else:
-        dark = (mode != "light")
+        dark = mode != "light"
     PALETTE.clear()
     PALETTE.update(get_palette(dark))
 

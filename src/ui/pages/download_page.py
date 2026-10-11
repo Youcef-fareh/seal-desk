@@ -778,7 +778,11 @@ class DownloadPage(tk.Frame):
             if settings.get("desktop_notifications", True):
                 send_notification(
                     t("notify_error_title"),
-                    t("notify_error_msg", title=(task.title or "Download")[:40], error=(task.error or "")[:60]),
+                    t(
+                        "notify_error_msg",
+                        title=(task.title or "Download")[:40],
+                        error=(task.error or "")[:60],
+                    ),
                 )
             if task.error:
                 # Detect unsupported-site / no-extractor errors from yt-dlp and
@@ -889,9 +893,13 @@ class DownloadPage(tk.Frame):
                 self.after(0, lambda: self._show_format_modal(url, info))
             except Exception as exc:  # noqa: BLE001
                 err_msg = str(exc)[:250]
-                self.after(0, lambda msg=err_msg: messagebox.showerror(t("format_picker_title"), msg))
+                self.after(
+                    0, lambda msg=err_msg: messagebox.showerror(t("format_picker_title"), msg)
+                )
             finally:
-                self.after(0, lambda: self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}"))
+                self.after(
+                    0, lambda: self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}")
+                )
 
         threading.Thread(target=fetch, daemon=True, name="seal-fetch-fmt").start()
 
@@ -1043,9 +1051,13 @@ class DownloadPage(tk.Frame):
                 self.after(0, lambda: self._show_playlist_modal(info))
             except Exception as exc:  # noqa: BLE001
                 err_msg = str(exc)[:250]
-                self.after(0, lambda msg=err_msg: messagebox.showerror(t("playlist_picker_title"), msg))
+                self.after(
+                    0, lambda msg=err_msg: messagebox.showerror(t("playlist_picker_title"), msg)
+                )
             finally:
-                self.after(0, lambda: self._pick_pl_btn.configure_text(f"📑 {t('btn_select_items')}"))
+                self.after(
+                    0, lambda: self._pick_pl_btn.configure_text(f"📑 {t('btn_select_items')}")
+                )
 
         threading.Thread(target=fetch, daemon=True, name="seal-fetch-pl").start()
 
@@ -1093,8 +1105,12 @@ class DownloadPage(tk.Frame):
             for _, v in item_vars:
                 v.set(False)
 
-        SealButton(tool_row, text=t("ctx_select_all"), variant="ghost", command=_select_all, height=26).pack(side="left")
-        SealButton(tool_row, text="Deselect All", variant="ghost", command=_deselect_all, height=26).pack(side="left", padx=(SPACING["sm"], 0))
+        SealButton(
+            tool_row, text=t("ctx_select_all"), variant="ghost", command=_select_all, height=26
+        ).pack(side="left")
+        SealButton(
+            tool_row, text="Deselect All", variant="ghost", command=_deselect_all, height=26
+        ).pack(side="left", padx=(SPACING["sm"], 0))
 
         scroll = SealScrollFrame(dlg)
         scroll.pack(fill="both", expand=True, padx=pad, pady=(0, pad))
@@ -1139,7 +1155,9 @@ class DownloadPage(tk.Frame):
                         if not e_url.startswith("http"):
                             e_url = f"https://www.youtube.com/watch?v={e_url}"
                         task_id = downloader.queue_download(e_url, prefs)
-                        t_obj = next((x for x in downloader.get_tasks() if x.task_id == task_id), None)
+                        t_obj = next(
+                            (x for x in downloader.get_tasks() if x.task_id == task_id), None
+                        )
                         if t_obj:
                             self._create_card(t_obj)
                         queued_any = True

@@ -826,7 +826,9 @@ class Downloader:
                     # Convert to SRT for maximum compatibility
                     opts["convertsubtitles"] = "srt"
                     opts.setdefault("postprocessors", [])
-                    opts["postprocessors"].append({"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False})
+                    opts["postprocessors"].append(
+                        {"key": "FFmpegEmbedSubtitle", "already_have_subtitle": False}
+                    )
             else:
                 # WITHOUT ffmpeg: yt-dlp CANNOT merge separate video and audio streams!
                 # If we used bestvideo+bestaudio, it would leave two unmerged files.
