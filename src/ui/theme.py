@@ -5,6 +5,8 @@ Centralises all colors, fonts, and spacing tokens.
 
 from __future__ import annotations
 
+import sys
+
 # ──────────────────────────────────────────────────────────────────────────────
 # Color Palette  (Dark-first, Material-inspired + Violet accent)
 # ──────────────────────────────────────────────────────────────────────────────
@@ -73,8 +75,6 @@ LIGHT_OVERRIDES = {
     "progress_track": "#E0E0EC",
 }
 
-
-import sys
 
 def is_system_dark() -> bool:
     """Detect whether OS is in dark mode (Windows / macOS fallback)."""

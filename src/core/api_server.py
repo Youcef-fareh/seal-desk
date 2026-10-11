@@ -8,8 +8,9 @@ from __future__ import annotations
 
 import json
 import threading
+from collections.abc import Callable
 from http.server import BaseHTTPRequestHandler, ThreadingHTTPServer
-from typing import Any, Callable
+from typing import Any
 from urllib.parse import urlparse
 
 from .downloader import DownloadPreferences, downloader
@@ -180,7 +181,7 @@ class ApiServer:
             return True
         try:
             self._httpd = ThreadingHTTPServer((self.host, self.port), _ApiRequestHandler)
-            setattr(self._httpd, "_seal_server", self)
+            self._httpd._seal_server = self
             self._running = True
             self._thread = threading.Thread(
                 target=self._run,

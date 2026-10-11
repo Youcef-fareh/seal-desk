@@ -20,7 +20,8 @@ sys.path.insert(0, str(Path(__file__).parent))
 from src.core.i18n import set_language, t
 from src.core.settings import settings
 from src.ui.app_shell import AppShell
-from src.ui.theme import PALETTE as P, is_system_dark
+from src.ui.theme import PALETTE as P
+from src.ui.theme import is_system_dark
 
 
 def _get_lock_path() -> Path:

@@ -781,7 +781,7 @@ class SettingsPage(tk.Frame):
         )
         if f:
             try:
-                with open(f, "r", encoding="utf-8") as fp:
+                with open(f, encoding="utf-8") as fp:
                     loaded = json.load(fp)
                 if isinstance(loaded, dict):
                     settings.update(loaded)

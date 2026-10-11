@@ -888,7 +888,8 @@ class DownloadPage(tk.Frame):
                     info = ydl.extract_info(url, download=False)
                 self.after(0, lambda: self._show_format_modal(url, info))
             except Exception as exc:  # noqa: BLE001
-                self.after(0, lambda: messagebox.showerror(t("format_picker_title"), str(exc)[:250]))
+                err_msg = str(exc)[:250]
+                self.after(0, lambda msg=err_msg: messagebox.showerror(t("format_picker_title"), msg))
             finally:
                 self.after(0, lambda: self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}"))
 
@@ -1041,7 +1042,8 @@ class DownloadPage(tk.Frame):
                     info = ydl.extract_info(url, download=False)
                 self.after(0, lambda: self._show_playlist_modal(info))
             except Exception as exc:  # noqa: BLE001
-                self.after(0, lambda: messagebox.showerror(t("playlist_picker_title"), str(exc)[:250]))
+                err_msg = str(exc)[:250]
+                self.after(0, lambda msg=err_msg: messagebox.showerror(t("playlist_picker_title"), msg))
             finally:
                 self.after(0, lambda: self._pick_pl_btn.configure_text(f"📑 {t('btn_select_items')}"))
 
