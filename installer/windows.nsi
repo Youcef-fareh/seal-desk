@@ -18,8 +18,8 @@
 !define APP_EXE         "SealDesktop.exe"
 !define INSTALL_DIR     "$PROGRAMFILES64\${APP_NAME}"
 !define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
-!define MUI_ICON        "assets\icon.ico"
-!define MUI_UNICON      "assets\icon.ico"
+!define MUI_ICON        "${__FILEDIR__}\..\assets\icon.ico"
+!define MUI_UNICON      "${__FILEDIR__}\..\assets\icon.ico"
 
 ; ─── Output ────────────────────────────────────────────────────────────────
 Name            "${APP_NAME} ${APP_VERSION}"
