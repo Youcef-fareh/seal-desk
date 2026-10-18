@@ -99,12 +99,37 @@ jobs:
           Compress-Archive -Path "dist\SealDesktop\*" -DestinationPath "dist\${{ env.APP_NAME }}-${{ steps.version.outputs.version }}-windows-x64.zip"
 
       - name: Install NSIS
-        run: choco install nsis --yes --no-progress
+        id: nsis
+        run: |
+          choco install nsis --yes --no-progress
+
+          $makensisCommand = Get-Command makensis.exe -ErrorAction SilentlyContinue
+          $makensis = if ($makensisCommand) { $makensisCommand.Source }
+
+          if (-not $makensis) {
+            $searchRoots = @(
+              "${env:ProgramFiles(x86)}\NSIS",
+              "$env:ProgramFiles\NSIS",
+              "$env:ChocolateyInstall\lib\nsis"
+            ) | Where-Object { $_ -and (Test-Path $_) }
+
+            if ($searchRoots) {
+              $makensis = Get-ChildItem -Path $searchRoots -Filter makensis.exe -File -Recurse -ErrorAction SilentlyContinue |
+                Select-Object -First 1 -ExpandProperty FullName
+            }
+          }
+
+          if (-not $makensis) {
+            Write-Error "NSIS was installed, but makensis.exe could not be located."
+            exit 1
+          }
+
+          "executable=$makensis" >> $env:GITHUB_OUTPUT
+          Write-Host "Using NSIS compiler: $makensis"
 
       - name: Build NSIS installer
         run: |
-          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-          makensis /DAPP_VERSION=${{ steps.version.outputs.version }} installer\windows.nsi
+          & '${{ steps.nsis.outputs.executable }}' /DAPP_VERSION=${{ steps.version.outputs.version }} installer\windows.nsi
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           $installer = Get-Item "dist\SealDesktop-${{ steps.version.outputs.version }}-Setup.exe"
           Write-Host ("Compressed standalone installer size: {0:N1} MB" -f ($installer.Length / 1MB))
