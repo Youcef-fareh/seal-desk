@@ -64,10 +64,8 @@ chmod +x SealDesktop-*-linux-x86_64.AppImage
 ```
 
 ### Prerequisites
-- **FFmpeg** is required for audio extraction and video merging:
-  - Windows: `choco install ffmpeg` or [download](https://ffmpeg.org/download.html)
-  - macOS: `brew install ffmpeg`
-  - Linux: `sudo apt install ffmpeg`
+- Packaged builds include FFmpeg and need no separate installation.
+- When running from source, install FFmpeg with your platform's package manager for audio extraction and video merging.
 
 ## 🧩 Browser Extension
 

@@ -7,11 +7,9 @@ Produces a single-directory bundle for Windows/macOS/Linux.
 import sys
 from pathlib import Path
 
-try:
-    from PyInstaller.utils.hooks import collect_all
-    datas_imageio, binaries_imageio, hiddenimports_imageio = collect_all("imageio_ffmpeg")
-except Exception:
-    datas_imageio, binaries_imageio, hiddenimports_imageio = [], [], []
+from PyInstaller.utils.hooks import collect_all
+
+datas_imageio, binaries_imageio, hiddenimports_imageio = collect_all("imageio_ffmpeg")
 
 block_cipher = None
 
@@ -21,7 +19,6 @@ a = Analysis(
     binaries=binaries_imageio,
     datas=[
         ("assets", "assets"),
-        ("src", "src"),
     ] + datas_imageio,
     hiddenimports=[
         "yt_dlp",
@@ -30,8 +27,6 @@ a = Analysis(
         "yt_dlp.utils",
         "yt_dlp.networking",
         "platformdirs",
-        "requests",
-        "PIL",
         "tkinter",
         "tkinter.ttk",
         "tkinter.filedialog",
@@ -95,8 +90,8 @@ if sys.platform == "darwin":
         bundle_identifier="com.sealdesktop.app",
         info_plist={
             "CFBundleDisplayName": "Seal Desktop",
-            "CFBundleVersion": "1.3.0",
-            "CFBundleShortVersionString": "1.3.0",
+            "CFBundleVersion": "1.4.1",
+            "CFBundleShortVersionString": "1.4.1",
             "NSHighResolutionCapable": True,
         },
     )

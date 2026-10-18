@@ -1,14 +1,16 @@
 ; Seal Desktop – NSIS Installer Script
 ; Generates a professional Windows installer (.exe)
-; Requires NSIS 3.x and EnVar plugin
+; Requires NSIS 3.x
 
 !include "MUI2.nsh"
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
 ; ─── Metadata ──────────────────────────────────────────────────────────────
+!ifndef APP_VERSION
+    !define APP_VERSION     "1.4.1"
+!endif
 !define APP_NAME        "Seal Desktop"
-!define APP_VERSION     "1.3.0"
 !define APP_PUBLISHER   "Seal Desktop Team"
 !define APP_URL         "https://github.com/Youcef-fareh/seal-desk"
 !define APP_EXE         "SealDesktop.exe"
@@ -23,6 +25,7 @@ OutFile         "dist\SealDesktop-${APP_VERSION}-Setup.exe"
 InstallDir      "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
+SetCompressorDictSize 64
 SetCompressor   /SOLID lzma
 
 ; ─── MUI Pages ─────────────────────────────────────────────────────────────
@@ -35,7 +38,6 @@ SetCompressor   /SOLID lzma
 !define MUI_FINISHPAGE_SHOWREADME_FUNCTION CreateDesktopShortcut
 
 !insertmacro MUI_PAGE_WELCOME
-!insertmacro MUI_PAGE_LICENSE    "LICENSE"
 !insertmacro MUI_PAGE_DIRECTORY
 !insertmacro MUI_PAGE_INSTFILES
 !insertmacro MUI_PAGE_FINISH

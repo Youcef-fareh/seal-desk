@@ -45,52 +45,69 @@ jobs:
           pip install -r requirements.txt
           pip install pyinstaller
 
-      - name: Create placeholder icon (if missing)
-        shell: python
+      - name: Set release version
+        id: version
         run: |
-          from pathlib import Path
-          Path("assets").mkdir(exist_ok=True)
-          ico = Path("assets/icon.ico")
-          if not ico.exists():
-              # Create a minimal valid 16x16 ICO using Pillow
-              from PIL import Image, ImageDraw
-              img = Image.new("RGBA", (256, 256), (139, 92, 246, 255))
-              d = ImageDraw.Draw(img)
-              d.text((80, 90), "🦭", fill=(255,255,255,255))
-              img.save(str(ico), format="ICO", sizes=[(256,256),(128,128),(64,64),(32,32),(16,16)])
-              print("Created placeholder icon.")
+          $version = "${{ github.event.inputs.version }}"
+          if ($env:GITHUB_REF_TYPE -eq "tag") { $version = $env:GITHUB_REF_NAME }
+          if (-not $version) { $version = "v0.0.0-dev" }
+          "version=$($version.TrimStart('v'))" >> $env:GITHUB_OUTPUT
+
+      - name: Verify application icon
+        run: |
+          if (-not (Test-Path "assets\icon.ico")) {
+            Write-Error "Required application icon assets\icon.ico is missing."
+            exit 1
+          }
+
+      - name: Install UPX
+        run: |
+          choco install upx --yes --no-progress
+          $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
+          if (-not (Get-Command upx -ErrorAction SilentlyContinue)) {
+            Write-Error "UPX was not found after installation."
+            exit 1
+          }
+          (Split-Path (Get-Command upx).Source -Parent) >> $env:GITHUB_PATH
+          upx --version
 
       - name: Build with PyInstaller
         run: pyinstaller SealDesktop.spec --clean --noconfirm
 
       - name: Verify build output
         run: |
-          if (Test-Path "dist\SealDesktop\SealDesktop.exe") {
-            Write-Host "Build succeeded: SealDesktop.exe found"
-          } else {
-            Write-Host "ERROR: SealDesktop.exe not found!" -ForegroundColor Red
+          if (-not (Test-Path "dist\SealDesktop\SealDesktop.exe")) {
+            Write-Error "SealDesktop.exe was not created."
             exit 1
           }
+          $ffmpeg = Get-ChildItem "dist\SealDesktop" -Filter "ffmpeg*.exe" -Recurse
+          if (-not $ffmpeg) {
+            Write-Error "The standalone build is missing its bundled FFmpeg executable."
+            exit 1
+          }
+          $ffmpegVersion = & $ffmpeg[0].FullName -version 2>&1
+          if ($LASTEXITCODE -ne 0) {
+            Write-Error "The bundled FFmpeg executable failed to run."
+            exit $LASTEXITCODE
+          }
+          $size = (Get-ChildItem "dist\SealDesktop" -File -Recurse | Measure-Object -Property Length -Sum).Sum
+          Write-Host "Standalone build verified; $($ffmpegVersion[0])"
+          Write-Host ("Uncompressed application size: {0:N1} MB" -f ($size / 1MB))
 
       - name: Create ZIP archive
         run: |
-          $version = "${{ github.ref_name }}"
-          if (-not $version) { $version = "dev" }
-          Compress-Archive -Path "dist\SealDesktop\*" -DestinationPath "dist\${{ env.APP_NAME }}-$version-windows-x64.zip"
+          Compress-Archive -Path "dist\SealDesktop\*" -DestinationPath "dist\${{ env.APP_NAME }}-${{ steps.version.outputs.version }}-windows-x64.zip"
 
       - name: Install NSIS
         run: choco install nsis --yes --no-progress
 
       - name: Build NSIS installer
         run: |
-          # Refresh PATH so makensis is found after choco install
           $env:Path = [System.Environment]::GetEnvironmentVariable('Path','Machine') + ';' + [System.Environment]::GetEnvironmentVariable('Path','User')
-          $version = "${{ github.ref_name }}"
-          if (-not $version) { $version = "dev" }
-          # Update version in NSI script
-          (Get-Content installer\windows.nsi) -replace '1\.0\.0', $version.TrimStart('v') | Set-Content installer\windows.nsi
-          makensis installer\windows.nsi
-        continue-on-error: true   # Don't fail if NSIS fails (icon may be missing)
+          makensis /DAPP_VERSION=${{ steps.version.outputs.version }} installer\windows.nsi
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          $installer = Get-Item "dist\SealDesktop-${{ steps.version.outputs.version }}-Setup.exe"
+          Write-Host ("Compressed standalone installer size: {0:N1} MB" -f ($installer.Length / 1MB))
 
       - name: Upload Windows build artifacts
         uses: actions/upload-artifact@v4
@@ -99,7 +116,7 @@ jobs:
           path: |
             dist/${{ env.APP_NAME }}-*-windows-x64.zip
             dist/${{ env.APP_NAME }}-*-Setup.exe
-          if-no-files-found: warn
+          if-no-files-found: error
           retention-days: 30
 
   # ───────────────────────────────────────────────────────────────────────────
@@ -123,7 +140,7 @@ jobs:
         run: |
           python -m pip install --upgrade pip
           pip install -r requirements.txt
-          pip install pyinstaller
+          pip install pyinstaller pillow
 
       - name: Create placeholder icon (if missing)
         run: |

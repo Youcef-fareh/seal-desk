@@ -4,7 +4,7 @@ build-backend = "setuptools.backends.legacy:build"
 
 [project]
 name = "seal-desktop"
-version = "1.4.0"
+version = "1.4.1"
 description = "Cross-platform video & audio downloader powered by yt-dlp"
 readme = "README.md"
 license = { text = "GPL-3.0" }
@@ -13,7 +13,6 @@ dependencies = [
     "yt-dlp>=2024.11.04",
     "requests>=2.31.0",
     "platformdirs>=4.1.0",
-    "Pillow>=10.2.0",
     "imageio-ffmpeg>=0.5.1",
 ]
 
