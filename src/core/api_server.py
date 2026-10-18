@@ -59,7 +59,7 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
                 {
                     "status": "ok",
                     "app": "Seal Desktop",
-                    "version": "1.4.0",
+                    "version": "1.5.0",
                     "message": "Seal Desktop companion server is active",
                 },
             )
@@ -118,7 +118,23 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
                 return
 
             # Construct preferences, combining request payload with user settings
-            extract_audio = bool(payload.get("extract_audio", payload.get("is_audio", False)))
+            download_mode = str(
+                payload.get("download_mode")
+                or (
+                    "subtitles"
+                    if payload.get("subtitles_only")
+                    else (
+                        "audio"
+                        if payload.get("extract_audio", payload.get("is_audio"))
+                        else "video"
+                    )
+                )
+            )
+            subtitles_only = bool(payload.get("subtitles_only", download_mode == "subtitles"))
+            extract_audio = (
+                bool(payload.get("extract_audio", payload.get("is_audio", False)))
+                and not subtitles_only
+            )
             audio_format = str(payload.get("audio_format") or settings.get("audio_format", "mp3"))
             video_quality = str(payload.get("video_quality", payload.get("quality", "best")))
             video_container = str(
@@ -126,6 +142,12 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
             )
             embed_subtitles = bool(
                 payload.get("embed_subtitles", settings.get("embed_subtitles", False))
+            )
+            subtitle_source = str(
+                payload.get("subtitle_source") or settings.get("subtitle_source", "manual")
+            )
+            subtitle_languages = str(
+                payload.get("subtitle_languages") or settings.get("subtitle_languages", "en")
             )
 
             # Safely resolve output_dir — settings.get may return None if key not set yet
@@ -136,10 +158,14 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
 
             prefs = DownloadPreferences(
                 extract_audio=extract_audio,
+                subtitles_only=subtitles_only,
+                download_mode=download_mode,
                 audio_format=audio_format,
                 video_quality=video_quality,
                 video_container=video_container,
                 embed_subtitles=embed_subtitles,
+                subtitle_source=subtitle_source,
+                subtitle_languages=subtitle_languages,
                 output_dir=_output_dir,
                 embed_metadata=bool(settings.get("embed_metadata", True)),
                 embed_thumbnail=bool(settings.get("embed_thumbnail", True)),

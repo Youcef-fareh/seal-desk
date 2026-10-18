@@ -32,7 +32,12 @@ class HistoryRow(tk.Frame):
         self._build()
 
     def _build(self) -> None:
-        icon = "🎵" if self._entry.get("is_audio") else "🎬"
+        if self._entry.get("is_subtitles"):
+            icon = "💬"
+        elif self._entry.get("is_audio"):
+            icon = "🎵"
+        else:
+            icon = "🎬"
         title = self._entry.get("title") or self._entry.get("url", "")
 
         row = tk.Frame(self, bg=P["bg_1"])
@@ -170,8 +175,11 @@ class HistoryPage(tk.Frame):
 
     def _render(self, entries: list[dict]) -> None:
         for w in self._scroll.inner.winfo_children():
-            w.destroy()
+            # Never destroy the placeholder: it is reused (and re-texted on language change)
+            if w is not self._empty_lbl:
+                w.destroy()
 
+        self._empty_lbl.pack_forget()
         if not entries:
             self._empty_lbl.pack(expand=True, pady=60)
             return

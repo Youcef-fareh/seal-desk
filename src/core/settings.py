@@ -32,7 +32,9 @@ DEFAULTS: dict[str, Any] = {
     "playlist_subdir": True,
     "restrict_filenames": False,
     # Format & Merging
+    "download_mode": "video",  # "video" | "audio" | "subtitles"
     "extract_audio": False,
+    "subtitles_only": False,
     "audio_format": "mp3",
     "video_quality": "best",
     "video_container": "mp4",  # "mp4" | "mkv"

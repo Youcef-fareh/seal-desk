@@ -90,8 +90,8 @@ if sys.platform == "darwin":
         bundle_identifier="com.sealdesktop.app",
         info_plist={
             "CFBundleDisplayName": "Seal Desktop",
-            "CFBundleVersion": "1.4.4",
-            "CFBundleShortVersionString": "1.4.4",
+            "CFBundleVersion": "1.5.0",
+            "CFBundleShortVersionString": "1.5.0",
             "NSHighResolutionCapable": True,
         },
     )

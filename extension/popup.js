@@ -173,9 +173,13 @@ function setupUIHandlers() {
   // Mode tabs
   const tabVideo = document.getElementById("tab-video");
   const tabAudio = document.getElementById("tab-audio");
+  const tabSubtitles = document.getElementById("tab-subtitles");
 
   tabVideo.addEventListener("click", () => setMode("video"));
   tabAudio.addEventListener("click", () => setMode("audio"));
+  if (tabSubtitles) {
+    tabSubtitles.addEventListener("click", () => setMode("subtitles"));
+  }
 
   // Paste button
   document.getElementById("btn-paste-url").addEventListener("click", async () => {
@@ -226,24 +230,33 @@ function setupUIHandlers() {
   });
 }
 
-/** Set UI download mode (video vs audio) */
+/** Set UI download mode (video vs audio vs subtitles) */
 function setMode(mode) {
   currentMode = mode;
   const tabVideo = document.getElementById("tab-video");
   const tabAudio = document.getElementById("tab-audio");
+  const tabSubtitles = document.getElementById("tab-subtitles");
   const videoOpts = document.getElementById("video-options");
   const audioOpts = document.getElementById("audio-options");
+  const subsOpts = document.getElementById("subtitles-options");
+
+  tabVideo?.classList.remove("active");
+  tabAudio?.classList.remove("active");
+  tabSubtitles?.classList.remove("active");
+
+  if (videoOpts) videoOpts.style.display = "none";
+  if (audioOpts) audioOpts.style.display = "none";
+  if (subsOpts) subsOpts.style.display = "none";
 
   if (mode === "video") {
-    tabVideo.classList.add("active");
-    tabAudio.classList.remove("active");
-    videoOpts.style.display = "flex";
-    audioOpts.style.display = "none";
-  } else {
-    tabAudio.classList.add("active");
-    tabVideo.classList.remove("active");
-    videoOpts.style.display = "none";
-    audioOpts.style.display = "flex";
+    tabVideo?.classList.add("active");
+    if (videoOpts) videoOpts.style.display = "flex";
+  } else if (mode === "audio") {
+    tabAudio?.classList.add("active");
+    if (audioOpts) audioOpts.style.display = "flex";
+  } else if (mode === "subtitles") {
+    tabSubtitles?.classList.add("active");
+    if (subsOpts) subsOpts.style.display = "flex";
   }
 }
 
@@ -260,7 +273,10 @@ async function sendDownload(autoStart = true) {
   const payload = {
     url: url,
     title: title || "Media Download",
+    download_mode: currentMode,
+    subtitles_only: currentMode === "subtitles",
     extract_audio: currentMode === "audio",
+    subtitle_source: document.getElementById("sub-source")?.value || "both",
     audio_format: document.getElementById("audio-format")?.value || "mp3",
     video_quality: document.getElementById("video-quality")?.value || "best",
     video_container: document.getElementById("video-format")?.value || "mp4",

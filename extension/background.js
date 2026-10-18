@@ -60,6 +60,13 @@ function setupContextMenus() {
     });
 
     chrome.contextMenus.create({
+      id: "seal-download-subtitles",
+      parentId: "seal-root",
+      title: "💬 Download Subtitles",
+      contexts: ["page", "link", "video", "audio", "selection"],
+    });
+
+    chrome.contextMenus.create({
       id: "seal-add-queue",
       parentId: "seal-root",
       title: "➕ Add to Queue",
@@ -83,12 +90,15 @@ chrome.contextMenus.onClicked.addListener(async (info, tab) => {
 
   const title = tab ? tab.title : "";
   const isAudio = info.menuItemId === "seal-download-audio";
+  const isSubtitles = info.menuItemId === "seal-download-subtitles";
   const autoStart = info.menuItemId !== "seal-add-queue";
 
   await triggerDownload({
     url: targetUrl,
     title: title,
+    download_mode: isSubtitles ? "subtitles" : (isAudio ? "audio" : "video"),
     extract_audio: isAudio,
+    subtitles_only: isSubtitles,
     auto_start: autoStart,
   });
 });
@@ -144,7 +154,10 @@ async function triggerDownload(options) {
   const payload = {
     url: options.url,
     title: options.title || "",
+    download_mode: options.download_mode || (options.subtitles_only ? "subtitles" : (options.extract_audio ? "audio" : "video")),
+    subtitles_only: Boolean(options.subtitles_only),
     extract_audio: Boolean(options.extract_audio),
+    subtitle_source: options.subtitle_source || "both",
     audio_format: options.audio_format || settings.defaultAudioFormat,
     video_quality: options.video_quality || settings.defaultQuality,
     video_container: options.video_container || "mp4",

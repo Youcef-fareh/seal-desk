@@ -286,8 +286,17 @@ class SettingsPage(tk.Frame):
         sec_fmt_lbl, sec_fmt = _section(inner, t("sec_format"))
         self._trans_labels.append((sec_fmt_lbl, "sec_format"))
 
-        _, lbl_def_audio = _toggle_row(sec_fmt, t("label_default_audio"), "extract_audio")
-        self._trans_labels.append((lbl_def_audio, "label_default_audio"))
+        _, lbl_def_mode, _ = _dropdown_row(
+            sec_fmt,
+            t("label_default_mode"),
+            "download_mode",
+            ["video", "audio", "subtitles"],
+            on_change_extra=lambda val: (
+                settings.set("extract_audio", val == "audio"),
+                settings.set("subtitles_only", val == "subtitles"),
+            ),
+        )
+        self._trans_labels.append((lbl_def_mode, "label_default_mode"))
 
         _, lbl_af, _ = _dropdown_row(
             sec_fmt,

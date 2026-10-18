@@ -50,6 +50,8 @@ def test_fmt_eta():
 def test_download_preferences_defaults():
     prefs = DownloadPreferences()
     assert prefs.extract_audio is False
+    assert prefs.subtitles_only is False
+    assert prefs.download_mode == "video"
     assert prefs.audio_format == "mp3"
     assert prefs.video_quality == "best"
     assert prefs.video_container == "mp4"
@@ -187,10 +189,13 @@ def test_updater_version_check():
 # ──────────────────────────────────────────────
 
 
-def test_settings_get_default():
-    from src.core.settings import Settings
+def test_settings_get_default(monkeypatch, tmp_path):
+    from src.core.settings import DEFAULTS, Settings
 
+    monkeypatch.setattr("src.core.settings._config_path", lambda: tmp_path / "settings.json")
     s = Settings()
+    assert s.get("download_mode") == "video"
+    assert s.get("subtitles_only") is False
     assert s.get("extract_audio") is False
     assert s.get("audio_format") == "mp3"
     assert s.get("language") in ("en", "ar")
@@ -298,5 +303,60 @@ def test_prefetch_task_info(monkeypatch):
     assert updated.duration_str == "03:00"
     assert updated.quality_label == "1920x1080 · H264"
     assert "~50.0 MB" in updated.estimated_size
+
+
+def test_subtitles_build_opts():
+    import threading
+
+    dl = Downloader()
+    prefs = DownloadPreferences(
+        subtitles_only=True,
+        subtitle_source="both",
+        subtitle_languages="en,ar",
+    )
+    task = DownloadTask(url="https://example.com/watch?v=123", prefs=prefs)
+    opts = dl._build_opts(task, prefs, threading.Event(), threading.Event())
+
+    assert opts.get("skip_download") is True
+    assert opts.get("writesubtitles") is True
+    assert opts.get("writeautomaticsub") is True
+    assert opts.get("subtitleslangs") == ["en", "ar"]
+    assert opts.get("convertsubtitles") == "srt"
+
+
+def test_subtitles_prefetch(monkeypatch):
+    dl = Downloader()
+    prefs = DownloadPreferences(subtitles_only=True, subtitle_languages="en,fr")
+    task_id = dl.queue_download("https://example.com/watch?v=subs", prefs)
+    task = dl._tasks[task_id]
+    assert task.is_subtitles is True
+
+    fake_info = {
+        "title": "Subtitled Video",
+        "uploader": "Sub Channel",
+        "duration": 120,
+    }
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            return fake_info
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._prefetch_task_info(task.task_id)
+
+    updated = dl._tasks[task.task_id]
+    assert updated.title == "Subtitled Video"
+    assert updated.is_subtitles is True
+    assert "Subtitles" in updated.quality_label
+
 
 

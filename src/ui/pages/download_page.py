@@ -36,7 +36,6 @@ from ..widgets import (
     SealLabel,
     SealProgressBar,
     SealScrollFrame,
-    SealSwitch,
 )
 
 # ──────────────────────────────────────────────
@@ -66,7 +65,12 @@ class DownloadCard(SealCard):
         row1 = tk.Frame(self, bg=P["bg_1"])
         row1.pack(fill="x")
 
-        type_icon = "🎵" if self.task.is_audio else "🎬"
+        if getattr(self.task, "is_subtitles", False):
+            type_icon = "💬"
+        elif self.task.is_audio:
+            type_icon = "🎵"
+        else:
+            type_icon = "🎬"
         self._title_lbl = tk.Label(
             row1,
             text=f"{type_icon}  {self.task.title[:80]}",
@@ -194,7 +198,12 @@ class DownloadCard(SealCard):
         label, color = state_labels.get(task.state, ("…", P["text_secondary"]))
 
         title_text = task.title[:80] if task.title else task.url[:80]
-        type_icon = "🎵" if task.is_audio else "🎬"
+        if getattr(task, "is_subtitles", False):
+            type_icon = "💬"
+        elif task.is_audio:
+            type_icon = "🎵"
+        else:
+            type_icon = "🎬"
         self._title_lbl.configure(text=f"{type_icon}  {title_text}")
         self._state_lbl.configure(text=label, fg=color)
 
@@ -324,6 +333,8 @@ class DownloadPage(tk.Frame):
         s = settings
         return DownloadPreferences(
             extract_audio=s.get("extract_audio"),
+            subtitles_only=s.get("subtitles_only", False),
+            download_mode=s.get("download_mode", "video"),
             audio_format=s.get("audio_format"),
             video_quality=s.get("video_quality"),
             video_container=s.get("video_container", "mp4"),
@@ -395,16 +406,35 @@ class DownloadPage(tk.Frame):
         opts_row = tk.Frame(self._input_area, bg=P["bg_1"])
         opts_row.pack(fill="x", pady=(SPACING["sm"], 0))
 
-        self._audio_var = tk.BooleanVar(value=settings.get("extract_audio"))
-        self._audio_lbl = SealLabel(
-            opts_row, t("audio_only"), style="body", color="text_secondary", bg=P["bg_1"]
+        # Mode dropdown (Video + Audio / Audio only / Subtitles only)
+        self._mode_lbl = SealLabel(
+            opts_row, t("label_download_mode"), style="body", color="text_secondary", bg=P["bg_1"]
         )
-        self._audio_lbl.pack(side="left", padx=(0, SPACING["xs"]))
+        self._mode_lbl.pack(side="left", padx=(0, SPACING["xs"]))
 
-        self._audio_sw = SealSwitch(
-            opts_row, variable=self._audio_var, command=self._on_audio_toggle
+        initial_mode = settings.get("download_mode") or (
+            "audio"
+            if settings.get("extract_audio")
+            else ("subtitles" if settings.get("subtitles_only") else "video")
         )
-        self._audio_sw.pack(side="left")
+        self._mode_var = tk.StringVar(value=initial_mode)
+        self._mode_display_var = tk.StringVar(value=t(f"mode_{initial_mode}"))
+
+        self._mode_menu = tk.OptionMenu(
+            opts_row,
+            self._mode_display_var,
+            t("mode_video"),
+            t("mode_audio"),
+            t("mode_subtitles"),
+        )
+        self._mode_menu["menu"].delete(0, "end")
+        for m_val in ("video", "audio", "subtitles"):
+            self._mode_menu["menu"].add_command(
+                label=t(f"mode_{m_val}"),
+                command=lambda v=m_val: self._on_mode_change(v),
+            )
+        self._style_menu(self._mode_menu)
+        self._mode_menu.pack(side="left")
 
         # Quality dropdown
         self._quality_lbl = SealLabel(
@@ -486,7 +516,7 @@ class DownloadPage(tk.Frame):
         for val in _sub_src_opts:
             self._sub_src_menu["menu"].add_command(
                 label=t(f"sub_source_{val}"),
-                command=lambda v=val: self._sub_src_var.set(v),
+                command=lambda v=val: self._on_sub_source_change(v),
             )
         self._style_menu(self._sub_src_menu)
         self._sub_src_menu.pack(side="left")
@@ -577,6 +607,7 @@ class DownloadPage(tk.Frame):
         # Populate any existing tasks
         for task in downloader.get_tasks():
             self._create_card(task)
+        self._update_opts_visibility()
         self._update_queue_label()
 
     def _render_ffmpeg_banner(self) -> None:
@@ -660,11 +691,15 @@ class DownloadPage(tk.Frame):
 
     def _collect_current_prefs(self) -> DownloadPreferences:
         prefs = self._load_prefs()
-        prefs.extract_audio = self._audio_var.get()
+        mode = self._mode_var.get()
+        prefs.download_mode = mode
+        prefs.extract_audio = mode == "audio"
+        prefs.subtitles_only = mode == "subtitles"
         prefs.audio_format = self._audio_fmt_var.get()
         prefs.video_quality = self._quality_var.get()
         prefs.video_codec = self._codec_var.get()
         prefs.subtitle_source = self._sub_src_var.get()
+        prefs.subtitle_languages = settings.get("subtitle_languages", "en")
         return prefs
 
     # Accepts any syntactically valid HTTP(S) URL — platform validation is
@@ -767,13 +802,23 @@ class DownloadPage(tk.Frame):
                     "title": task.title,
                     "output": task.output_path,
                     "is_audio": task.is_audio,
+                    "is_subtitles": getattr(task, "is_subtitles", False),
+                    "download_mode": "subtitles"
+                    if getattr(task, "is_subtitles", False)
+                    else ("audio" if task.is_audio else "video"),
                 }
             )
             if settings.get("desktop_notifications", True):
-                send_notification(
-                    t("notify_completed_title"),
-                    t("notify_completed_msg", title=(task.title or "Download")[:60]),
-                )
+                if getattr(task, "is_subtitles", False):
+                    send_notification(
+                        t("notify_subs_completed_title"),
+                        t("notify_subs_completed_msg", title=(task.title or "Subtitles")[:60]),
+                    )
+                else:
+                    send_notification(
+                        t("notify_completed_title"),
+                        t("notify_completed_msg", title=(task.title or "Download")[:60]),
+                    )
         elif task.state == DownloadState.ERROR:
             if settings.get("desktop_notifications", True):
                 send_notification(
@@ -851,8 +896,45 @@ class DownloadPage(tk.Frame):
             self._empty_lbl.pack(expand=True, pady=60)
         self._update_queue_label()
 
-    def _on_audio_toggle(self, value: bool) -> None:
-        settings.set("extract_audio", value)
+    def _on_mode_change(self, mode: str) -> None:
+        settings.set("download_mode", mode)
+        settings.set("extract_audio", mode == "audio")
+        settings.set("subtitles_only", mode == "subtitles")
+        self._set_mode(mode)
+
+    def _set_mode(self, mode: str) -> None:
+        """Update the mode UI without touching the saved defaults."""
+        self._mode_var.set(mode)
+        self._mode_display_var.set(t(f"mode_{mode}"))
+        self._update_opts_visibility()
+
+    def _on_sub_source_change(self, val: str) -> None:
+        self._sub_src_var.set(val)
+        settings.set("subtitle_source", val)
+
+    def _update_opts_visibility(self) -> None:
+        mode = self._mode_var.get()
+        if mode == "video":
+            self._quality_lbl.pack(side="left", padx=(SPACING["md"], SPACING["xs"]))
+            self._q_menu.pack(side="left")
+            self._codec_lbl.pack(side="left", padx=(SPACING["md"], SPACING["xs"]))
+            self._c_menu.pack(side="left")
+            self._format_lbl.pack_forget()
+            self._af_menu.pack_forget()
+        elif mode == "audio":
+            self._quality_lbl.pack_forget()
+            self._q_menu.pack_forget()
+            self._codec_lbl.pack_forget()
+            self._c_menu.pack_forget()
+            self._format_lbl.pack(side="left", padx=(SPACING["md"], SPACING["xs"]))
+            self._af_menu.pack(side="left")
+        else:  # subtitles
+            self._quality_lbl.pack_forget()
+            self._q_menu.pack_forget()
+            self._codec_lbl.pack_forget()
+            self._c_menu.pack_forget()
+            self._format_lbl.pack_forget()
+            self._af_menu.pack_forget()
 
     def _pick_output_dir(self) -> None:
         d = filedialog.askdirectory(initialdir=settings.get("output_dir"))
@@ -995,10 +1077,10 @@ class DownloadPage(tk.Frame):
             chosen_fmt = next((f for f in formats if f.get("format_id") == chosen_id), None)
             if chosen_fmt:
                 if chosen_fmt.get("vcodec") == "none":
-                    self._audio_var.set(True)
+                    self._set_mode("audio")
                     self._audio_fmt_var.set(chosen_fmt.get("ext", "mp3"))
                 else:
-                    self._audio_var.set(False)
+                    self._set_mode("video")
                     h = chosen_fmt.get("height")
                     if h:
                         h_str = str(h)
@@ -1187,7 +1269,14 @@ class DownloadPage(tk.Frame):
         self._header_lbl.configure_text(t("page_download_title"))
         self._add_queue_btn.configure_text(t("btn_add_queue"))
         self._dl_btn.configure_text(t("btn_download_now"))
-        self._audio_lbl.configure_text(t("audio_only"))
+        self._mode_lbl.configure_text(t("label_download_mode"))
+        self._mode_display_var.set(t(f"mode_{self._mode_var.get()}"))
+        self._mode_menu["menu"].delete(0, "end")
+        for m_val in ("video", "audio", "subtitles"):
+            self._mode_menu["menu"].add_command(
+                label=t(f"mode_{m_val}"),
+                command=lambda v=m_val: self._on_mode_change(v),
+            )
         self._quality_lbl.configure_text(t("video_quality"))
         self._codec_lbl.configure_text(t("video_codec"))
         self._format_lbl.configure_text(t("audio_format"))

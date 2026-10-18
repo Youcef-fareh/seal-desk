@@ -46,6 +46,8 @@ class DownloadState(Enum):
 @dataclass
 class DownloadPreferences:
     extract_audio: bool = False
+    subtitles_only: bool = False
+    download_mode: str = "video"  # "video" | "audio" | "subtitles"
     audio_format: str = "mp3"  # mp3 | m4a | opus | flac | wav | best
     video_format: str = "bestvideo+bestaudio/best"
     video_quality: str = "best"  # best | 2160 | 1440 | 1080 | 720 | 480 | 360
@@ -101,6 +103,7 @@ class DownloadTask:
     thumbnail_url: str = ""
     output_path: str = ""
     is_audio: bool = False
+    is_subtitles: bool = False
     prefs: DownloadPreferences = field(default_factory=DownloadPreferences)
     uploader: str = ""
     duration_str: str = ""
@@ -215,7 +218,8 @@ class Downloader:
         """
         task = DownloadTask(
             url=url,
-            is_audio=prefs.extract_audio,
+            is_audio=prefs.extract_audio and not prefs.subtitles_only,
+            is_subtitles=prefs.subtitles_only,
             prefs=prefs,
             state=DownloadState.QUEUED,
         )
@@ -518,7 +522,10 @@ class Downloader:
                     task.duration_str = _fmt_eta(dur)
 
                 # Quality Label
-                if prefs.extract_audio:
+                if prefs.subtitles_only:
+                    task.quality_label = f"Subtitles · {prefs.subtitle_languages.upper()}"
+                    task.is_subtitles = True
+                elif prefs.extract_audio:
                     task.quality_label = f"Audio · {prefs.audio_format.upper()}"
                 else:
                     res = first.get("resolution")
@@ -603,6 +610,24 @@ class Downloader:
                     cleaned = task.output_path[:-5]
                     if Path(cleaned).exists():
                         task.output_path = cleaned
+                if prefs.subtitles_only:
+                    if task.output_path and not Path(task.output_path).exists():
+                        for cand in (
+                            task.output_path.rsplit(".", 1)[0] + ".srt",
+                            task.output_path.rsplit(".", 1)[0] + ".vtt",
+                        ):
+                            if Path(cand).exists():
+                                task.output_path = cand
+                                break
+                    if not task.output_path or not Path(task.output_path).exists():
+                        out_dir = Path(prefs.output_dir)
+                        if out_dir.exists():
+                            for ext in (".srt", ".vtt", ".ass"):
+                                matches = list(out_dir.glob(f"*{ext}"))
+                                if matches:
+                                    matches.sort(key=lambda p: p.stat().st_mtime, reverse=True)
+                                    task.output_path = str(matches[0])
+                                    break
                 _log.info("Completed: %s -> %s", task.url, task.output_path)
             self._update_task(task)
 
@@ -653,8 +678,10 @@ class Downloader:
                 self._update_task(task)
 
             elif status == "finished":
-                if not task.output_path:
-                    task.output_path = d.get("filename") or ""
+                if not task.output_path or task.prefs.subtitles_only:
+                    fn = d.get("filename") or ""
+                    if fn:
+                        task.output_path = fn
                 task.state = DownloadState.CONVERTING
                 task.progress = 0.99
                 self._update_task(task)
@@ -672,7 +699,8 @@ class Downloader:
                 info = d.get("info_dict") or {}
                 final = info.get("filepath") or info.get("filename")
                 if final:
-                    task.output_path = final
+                    if not task.prefs.subtitles_only or Path(final).exists():
+                        task.output_path = final
                 self._update_task(task)
 
         return hook
@@ -741,7 +769,30 @@ class Downloader:
 
         has_ffmpeg = is_ffmpeg_available()
 
-        if prefs.extract_audio:
+        if prefs.subtitles_only:
+            opts["skip_download"] = True
+            langs = [s.strip() for s in prefs.subtitle_languages.split(",") if s.strip()]
+            if not langs:
+                langs = ["en"]
+            if "all" in langs:
+                opts["allsubtitles"] = True
+            else:
+                opts["subtitleslangs"] = langs
+
+            src = prefs.subtitle_source or "both"
+            if src in ("manual", "both"):
+                opts["writesubtitles"] = True
+            if src in ("auto", "both"):
+                opts["writeautomaticsub"] = True
+
+            opts["convertsubtitles"] = "srt"
+            if has_ffmpeg:
+                opts.setdefault("postprocessors", [])
+                opts["postprocessors"].append(
+                    {"key": "FFmpegSubtitlesConvertor", "format": "srt", "when": "before_dl"}
+                )
+
+        elif prefs.extract_audio:
             if has_ffmpeg:
                 opts["format"] = "bestaudio/best"
                 opts["postprocessors"] = [
