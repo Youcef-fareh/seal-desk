@@ -6,11 +6,19 @@
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
-!cd "${__FILEDIR__}\.."
+; ─── Working directory ─────────────────────────────────────────────────────
+; makensis switches its working directory to the folder that contains the
+; script being compiled (installer\), so step up one level to reach the
+; repository root. Every path below is relative to the repository root.
+!cd ".."
+
+!if ! /FileExists "assets\icon.ico"
+    !error "assets\icon.ico could not be found from the repository root. Compile this script as: makensis installer\windows.nsi"
+!endif
 
 ; ─── Metadata ──────────────────────────────────────────────────────────────
 !ifndef APP_VERSION
-    !define APP_VERSION     "1.4.3"
+    !define APP_VERSION     "1.4.4"
 !endif
 !define APP_NAME        "Seal Desktop"
 !define APP_PUBLISHER   "Seal Desktop Team"
@@ -18,8 +26,8 @@
 !define APP_EXE         "SealDesktop.exe"
 !define INSTALL_DIR     "$PROGRAMFILES64\${APP_NAME}"
 !define UNINSTALL_KEY   "Software\Microsoft\Windows\CurrentVersion\Uninstall\${APP_NAME}"
-!define MUI_ICON        "${__FILEDIR__}\..\assets\icon.ico"
-!define MUI_UNICON      "${__FILEDIR__}\..\assets\icon.ico"
+!define MUI_ICON        "assets\icon.ico"
+!define MUI_UNICON      "assets\icon.ico"
 
 ; ─── Output ────────────────────────────────────────────────────────────────
 Name            "${APP_NAME} ${APP_VERSION}"
