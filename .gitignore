@@ -45,3 +45,8 @@ appimagetool
 
 # Installer artifacts
 installer/*.exe
+
+# Local reports and browser extension build artifacts
+/audit_report.md
+/extension.crx
+/extension.pem
