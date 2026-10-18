@@ -6,9 +6,11 @@
 !include "FileFunc.nsh"
 !include "LogicLib.nsh"
 
+!cd "${__FILEDIR__}\.."
+
 ; ─── Metadata ──────────────────────────────────────────────────────────────
 !ifndef APP_VERSION
-    !define APP_VERSION     "1.4.2"
+    !define APP_VERSION     "1.4.3"
 !endif
 !define APP_NAME        "Seal Desktop"
 !define APP_PUBLISHER   "Seal Desktop Team"
@@ -25,8 +27,8 @@ OutFile         "dist\SealDesktop-${APP_VERSION}-Setup.exe"
 InstallDir      "${INSTALL_DIR}"
 InstallDirRegKey HKLM "${UNINSTALL_KEY}" "InstallLocation"
 RequestExecutionLevel admin
-SetCompressorDictSize 64
 SetCompressor   /SOLID lzma
+SetCompressorDictSize 64
 
 ; ─── MUI Pages ─────────────────────────────────────────────────────────────
 !define MUI_WELCOMEPAGE_TITLE    "Welcome to ${APP_NAME} Setup"
