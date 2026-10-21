@@ -577,27 +577,49 @@ class Downloader:
         ydl_opts = self._build_opts(task, prefs, cancel_ev, pause_ev)
 
         try:
-            with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                info = ydl.extract_info(task.url, download=False)
-                if info:
-                    task.title = info.get("title") or task.url
-                    task.thumbnail_url = info.get("thumbnail") or ""
-                    is_pl = info.get("_type") == "playlist"
-                    if is_pl:
-                        task.playlist_count = len(info.get("entries") or [])
-                        task.state = DownloadState.DOWNLOADING_PLAYLIST
-                    else:
-                        task.state = DownloadState.DOWNLOADING
+            retry_limit = 2 if prefs.subtitles_only else 1
+            for attempt in range(retry_limit):
+                try:
+                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                        info = ydl.extract_info(task.url, download=False)
+                        if info:
+                            task.title = info.get("title") or task.url
+                            task.thumbnail_url = info.get("thumbnail") or ""
+                            is_pl = info.get("_type") == "playlist"
+                            if is_pl:
+                                task.playlist_count = len(info.get("entries") or [])
+                                task.state = DownloadState.DOWNLOADING_PLAYLIST
+                            else:
+                                task.state = DownloadState.DOWNLOADING
+                            self._update_task(task)
+
+                            if cancel_ev.is_set():
+                                task.state = (
+                                    DownloadState.PAUSED
+                                    if pause_ev.is_set()
+                                    else DownloadState.CANCELLED
+                                )
+                                self._update_task(task)
+                                return
+
+                            ydl.download([task.url])
+                    break
+                except yt_dlp.utils.DownloadError as exc:
+                    reload_requested = "the page needs to be reloaded" in str(exc).casefold()
+                    if (
+                        attempt + 1 >= retry_limit
+                        or not prefs.subtitles_only
+                        or not reload_requested
+                        or cancel_ev.is_set()
+                        or pause_ev.is_set()
+                    ):
+                        raise
+                    _log.warning(
+                        "YouTube requested a page reload for subtitle download %s; retrying once",
+                        task.url,
+                    )
+                    task.state = DownloadState.FETCHING_INFO
                     self._update_task(task)
-
-                    if cancel_ev.is_set():
-                        task.state = (
-                            DownloadState.PAUSED if pause_ev.is_set() else DownloadState.CANCELLED
-                        )
-                        self._update_task(task)
-                        return
-
-                    ydl.download([task.url])
 
             if pause_ev.is_set():
                 task.state = DownloadState.PAUSED

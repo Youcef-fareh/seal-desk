@@ -324,6 +324,78 @@ def test_subtitles_build_opts():
     assert opts.get("convertsubtitles") == "srt"
 
 
+def test_subtitles_retry_youtube_reload_error(monkeypatch):
+    import threading
+
+    import yt_dlp
+
+    dl = Downloader()
+    prefs = DownloadPreferences(subtitles_only=True)
+    task = DownloadTask(url="https://example.com/watch?v=subs", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    attempts = 0
+
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            nonlocal attempts
+            attempts += 1
+            if attempts == 1:
+                raise yt_dlp.utils.DownloadError("The page needs to be reloaded.")
+            return {"title": "Subtitled video"}
+
+        def download(self, urls):
+            pass
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert attempts == 2
+    assert task.state == DownloadState.COMPLETED
+    assert task.title == "Subtitled video"
+
+
+def test_video_download_does_not_retry_youtube_reload_error(monkeypatch):
+    import threading
+
+    import yt_dlp
+
+    dl = Downloader()
+    prefs = DownloadPreferences()
+    task = DownloadTask(url="https://example.com/watch?v=video", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    attempts = 0
+
+    class FakeYDL:
+        def __init__(self, opts):
+            pass
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            nonlocal attempts
+            attempts += 1
+            raise yt_dlp.utils.DownloadError("The page needs to be reloaded.")
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert attempts == 1
+    assert task.state == DownloadState.ERROR
+
+
 def test_subtitles_prefetch(monkeypatch):
     dl = Downloader()
     prefs = DownloadPreferences(subtitles_only=True, subtitle_languages="en,fr")
@@ -357,6 +429,5 @@ def test_subtitles_prefetch(monkeypatch):
     assert updated.title == "Subtitled Video"
     assert updated.is_subtitles is True
     assert "Subtitles" in updated.quality_label
-
 
 
