@@ -18,7 +18,7 @@
 
 ; ─── Metadata ──────────────────────────────────────────────────────────────
 !ifndef APP_VERSION
-    !define APP_VERSION     "1.5.2"
+    !define APP_VERSION     "1.5.3"
 !endif
 !define APP_NAME        "Seal Desktop"
 !define APP_PUBLISHER   "Seal Desktop Team"

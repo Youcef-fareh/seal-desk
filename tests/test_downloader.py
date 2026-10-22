@@ -173,10 +173,11 @@ def test_ffmpeg_utils():
 
 
 def test_updater_version_check():
-    assert CURRENT_VERSION == "1.5.2"
+    assert CURRENT_VERSION == "1.5.3"
     assert is_newer_version("v1.5.1") is False
     assert is_newer_version("v1.5.2") is False
-    assert is_newer_version("v1.5.3") is True
+    assert is_newer_version("v1.5.3") is False
+    assert is_newer_version("v1.5.4") is True
 
     assert _parse_version_tuple("v1.2.0") == (1, 2, 0)
     assert _parse_version_tuple("1.0.0") == (1, 0, 0)

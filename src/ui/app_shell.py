@@ -116,16 +116,17 @@ class AppShell(tk.Frame):
     PAGES = ["download", "history", "settings"]
 
     def __init__(self, root: tk.Tk) -> None:
+        apply_theme(settings.get("theme", "dark"))
         super().__init__(root, bg=P["bg_0"])
         self._root = root
         self.pack(fill="both", expand=True)
         self._current_page = "download"
         self._nav_items: dict[str, NavItem] = {}
         self._pages: dict[str, tk.Frame] = {}
+        self._latest_release_info: AppReleaseInfo | None = None
 
-        # Initialize language and theme from settings
+        # Initialize language from settings
         set_language(settings.get("language", "en"))
-        apply_theme(settings.get("theme", "dark"))
         add_language_listener(self._retranslate)
 
         # Clipboard Monitor
@@ -166,10 +167,19 @@ class AppShell(tk.Frame):
             if page.winfo_exists():
                 page.destroy()
         self._pages.clear()
+        self._sidebar.destroy()
+        self._content.destroy()
+        self.configure(bg=P["bg_0"])
+        self._nav_items.clear()
+        self._build_sidebar()
+        self._build_content()
         self._navigate(self._current_page)
+        if self._latest_release_info:
+            self._show_update_banner(self._latest_release_info)
 
     def _build_sidebar(self) -> None:
         sidebar = tk.Frame(self, bg=P["bg_1"], width=SIDEBAR_WIDTH)
+        self._sidebar = sidebar
         sidebar.pack(side="left", fill="y")
         sidebar.pack_propagate(False)
 
@@ -278,7 +288,6 @@ class AppShell(tk.Frame):
             width=28,
         )
         self._update_banner_dismiss.pack(side="right", padx=(0, SPACING["sm"]))
-        self._latest_release_info: AppReleaseInfo | None = None
 
     def _navigate(self, page_id: str) -> None:
         if page_id == self._current_page and page_id in self._pages:

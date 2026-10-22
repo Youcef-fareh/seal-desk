@@ -46,6 +46,7 @@ BASE_PALETTE = {
     "btn_primary": "#8B5CF6",
     "btn_primary_hover": "#7C3AED",
     "btn_primary_active": "#6D28D9",
+    "btn_text": "#FFFFFF",
     "btn_secondary": "#24242D",
     "btn_secondary_hover": "#2E2E3A",
     "btn_danger": "#DC2626",
@@ -58,7 +59,7 @@ BASE_PALETTE = {
 
 PALETTE = dict(BASE_PALETTE)
 
-# Light-mode overrides (WIP — not yet wired to UI toggle)
+# Light-mode overrides
 LIGHT_OVERRIDES = {
     "bg_0": "#F4F4F8",
     "bg_1": "#FFFFFF",
@@ -68,11 +69,24 @@ LIGHT_OVERRIDES = {
     "text_primary": "#0D0D1A",
     "text_secondary": "#4A4A60",
     "text_tertiary": "#888898",
+    "accent": "#6D28D9",
+    "accent_hover": "#5B21B6",
+    "accent_dim": "#EEE8FF",
+    "accent_light": "#6D28D9",
     "border": "#D0D0E0",
     "divider": "#E8E8F0",
+    "scrollbar": "#C4C4D8",
+    "scrollbar_hover": "#A8A8C0",
+    "btn_primary": "#6D28D9",
+    "btn_primary_hover": "#5B21B6",
+    "btn_primary_active": "#4C1D95",
+    "btn_secondary": "#EDEDF4",
+    "btn_secondary_hover": "#E0E0EC",
     "entry_bg": "#FFFFFF",
     "entry_border": "#C4C4D8",
+    "entry_border_focus": "#6D28D9",
     "progress_track": "#E0E0EC",
+    "progress_fill": "#6D28D9",
 }
 
 

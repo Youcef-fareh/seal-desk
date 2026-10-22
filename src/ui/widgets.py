@@ -59,9 +59,9 @@ class SealButton(tk.Frame):
         **kwargs: Any,
     ) -> None:
         colors = {
-            "primary": (P["btn_primary"], P["btn_primary_hover"], P["text_primary"]),
+            "primary": (P["btn_primary"], P["btn_primary_hover"], P["btn_text"]),
             "secondary": (P["btn_secondary"], P["btn_secondary_hover"], P["text_primary"]),
-            "danger": (P["btn_danger"], P["btn_danger_hover"], P["text_primary"]),
+            "danger": (P["btn_danger"], P["btn_danger_hover"], P["btn_text"]),
             "ghost": ("", P["bg_3"], P["text_secondary"]),
         }
         self._bg, self._hover_bg, self._fg = colors.get(variant, colors["primary"])
