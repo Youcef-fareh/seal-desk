@@ -17,6 +17,7 @@ from .downloader import DownloadPreferences, downloader
 from .logger import get_logger
 from .notifications import send_notification
 from .settings import settings
+from .updater import CURRENT_VERSION
 
 DEFAULT_API_PORT = 48123
 
@@ -59,7 +60,7 @@ class _ApiRequestHandler(BaseHTTPRequestHandler):
                 {
                     "status": "ok",
                     "app": "Seal Desktop",
-                    "version": "1.5.0",
+                    "version": CURRENT_VERSION,
                     "message": "Seal Desktop companion server is active",
                 },
             )

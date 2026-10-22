@@ -16,7 +16,7 @@ from src.core.downloader import (
 )
 from src.core.ffmpeg_utils import get_ffmpeg_path, is_ffmpeg_available
 from src.core.i18n import get_language, is_rtl, set_language, t
-from src.core.updater import _parse_version_tuple, is_newer_version
+from src.core.updater import CURRENT_VERSION, _parse_version_tuple, is_newer_version
 
 # ──────────────────────────────────────────────
 # Utility function tests
@@ -173,6 +173,11 @@ def test_ffmpeg_utils():
 
 
 def test_updater_version_check():
+    assert CURRENT_VERSION == "1.5.2"
+    assert is_newer_version("v1.5.1") is False
+    assert is_newer_version("v1.5.2") is False
+    assert is_newer_version("v1.5.3") is True
+
     assert _parse_version_tuple("v1.2.0") == (1, 2, 0)
     assert _parse_version_tuple("1.0.0") == (1, 0, 0)
     assert _parse_version_tuple("v2.0-beta") == (2, 0)
@@ -429,5 +434,3 @@ def test_subtitles_prefetch(monkeypatch):
     assert updated.title == "Subtitled Video"
     assert updated.is_subtitles is True
     assert "Subtitles" in updated.quality_label
-
-

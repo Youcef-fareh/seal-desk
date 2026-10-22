@@ -17,7 +17,7 @@ import requests
 
 REPO = "Youcef-fareh/seal-desk"
 YTDLP_REPO = "yt-dlp/yt-dlp"
-CURRENT_VERSION = "1.5.0"
+CURRENT_VERSION = "1.5.2"
 
 
 @dataclass

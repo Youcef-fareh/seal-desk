@@ -12,6 +12,7 @@ import pytest
 
 from src.core.api_server import ApiServer
 from src.core.downloader import downloader
+from src.core.updater import CURRENT_VERSION
 
 
 def _get_free_port() -> int:
@@ -42,7 +43,7 @@ def test_api_ping(api_server):
         data = json.loads(resp.read().decode("utf-8"))
         assert data["status"] == "ok"
         assert data["app"] == "Seal Desktop"
-        assert "version" in data
+        assert data["version"] == CURRENT_VERSION
 
 
 def test_api_status(api_server):
@@ -143,4 +144,3 @@ def test_api_download_subtitles_post(api_server):
         assert task.prefs.subtitles_only is True
         assert task.prefs.subtitle_source == "both"
         assert task.prefs.subtitle_languages == "en,ar"
-
