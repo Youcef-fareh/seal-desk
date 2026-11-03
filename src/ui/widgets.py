@@ -501,7 +501,7 @@ class SealScrollFrame(tk.Frame):
 
         self._canvas = tk.Canvas(self, bg=P["bg_0"], highlightthickness=0, bd=0)
         self._scrollbar = tk.Scrollbar(self, orient="vertical", command=self._canvas.yview)
-        self._canvas.configure(yscrollcommand=self._scrollbar.set)
+        self._canvas.configure(yscrollcommand=self._scrollbar.set, yscrollincrement=18)
 
         self._scrollbar.pack(side="right", fill="y")
         self._canvas.pack(side="left", fill="both", expand=True)
@@ -537,7 +537,11 @@ class SealScrollFrame(tk.Frame):
         self._canvas.itemconfig(self._window, width=e.width)
 
     def _on_mousewheel(self, e: tk.Event) -> None:
-        self._canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+        # Use a single 18px step for a normal wheel notch, while still handling
+        # small deltas from touchpads and macOS mice.
+        steps = max(1, round(abs(e.delta) / 120))
+        direction = -1 if e.delta > 0 else 1
+        self._canvas.yview_scroll(direction * steps, "units")
 
     def _on_mousewheel_linux(self, e: tk.Event) -> None:
         self._canvas.yview_scroll(-1 if e.num == 4 else 1, "units")

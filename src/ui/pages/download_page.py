@@ -171,9 +171,22 @@ class DownloadCard(SealCard):
         )
         self._url_lbl.pack(fill="x")
 
+        self._subtitle_warning_lbl = tk.Label(
+            self,
+            text=t("subtitle_unavailable"),
+            bg=P["bg_1"],
+            fg=P["warning"],
+            font=FONTS["caption"],
+            anchor="w",
+        )
         # Separator
-        sep = tk.Frame(self, bg=P["divider"], height=1)
-        sep.pack(fill="x", pady=(pad, 0))
+        self._separator = tk.Frame(self, bg=P["divider"], height=1)
+        self._separator.pack(fill="x", pady=(pad, 0))
+
+        if self.task.subtitle_warning:
+            self._subtitle_warning_lbl.pack(
+                fill="x", pady=(3, 0), before=self._separator
+            )
 
         self.refresh(self.task)
 
@@ -232,6 +245,14 @@ class DownloadCard(SealCard):
             url_display = task.url[:85] + ("…" if len(task.url) > 85 else "")
         self._url_lbl.configure(text=url_display)
 
+        if task.subtitle_warning:
+            self._subtitle_warning_lbl.configure(text=t("subtitle_unavailable"))
+            self._subtitle_warning_lbl.pack(
+                fill="x", pady=(3, 0), before=self._separator
+            )
+        else:
+            self._subtitle_warning_lbl.pack_forget()
+
         self._pbar.set_progress(task.progress)
 
         # Update button states
@@ -288,7 +309,7 @@ class DownloadCard(SealCard):
     def _retry(self) -> None:
         if self.task.state != DownloadState.ERROR or not self.task.url:
             return
-        downloader.start_download(self.task.url, self.task.prefs)
+        downloader.retry_download(self.task.task_id)
 
     def _delete(self) -> None:
         self._on_delete(self.task.task_id)
@@ -857,7 +878,7 @@ class DownloadPage(tk.Frame):
             on_delete=self._delete_task,
             on_move=self._move_task,
         )
-        card.pack(fill="x", pady=(0, SPACING["sm"]))
+        card.pack(fill="x", pady=(0, SPACING["md"]))
         self._task_cards[task.task_id] = card
 
     def _move_task(self, task_id: str, direction: int) -> None:
@@ -868,7 +889,7 @@ class DownloadPage(tk.Frame):
                 if tid in self._task_cards:
                     card = self._task_cards[tid]
                     card.pack_forget()
-                    card.pack(fill="x", pady=(0, SPACING["sm"]))
+                    card.pack(fill="x", pady=(0, SPACING["md"]))
 
     def _delete_task(self, task_id: str) -> None:
         downloader.delete_task(task_id)

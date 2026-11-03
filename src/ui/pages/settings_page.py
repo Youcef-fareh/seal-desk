@@ -31,6 +31,7 @@ from ...core.updater import (
     check_app_update,
     download_app_installer,
     get_ytdlp_version,
+    launch_app_installer,
     update_ytdlp,
 )
 from ..theme import FONTS, SPACING
@@ -625,7 +626,9 @@ class SettingsPage(tk.Frame):
 
         check_app_update(on_result)
 
-    def _show_update_dialog(self, info: AppReleaseInfo) -> None:
+    def _show_update_dialog(
+        self, info: AppReleaseInfo, *, download_immediately: bool = False
+    ) -> None:
         dlg = tk.Toplevel(self)
         dlg.title(t("update_available_title"))
         dlg.geometry("540x440")
@@ -659,6 +662,25 @@ class SettingsPage(tk.Frame):
             font=FONTS["heading3"],
         ).pack(anchor="w", padx=pad, pady=(0, 4))
 
+        if sys.platform != "win32":
+            tk.Label(
+                dlg,
+                text=t("update_platform_unsupported"),
+                bg=P["bg_1"],
+                fg=P["warning"],
+                font=FONTS["body_sm"],
+                anchor="w",
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+        elif not info.asset_url or not info.asset_name:
+            tk.Label(
+                dlg,
+                text=t("update_asset_missing"),
+                bg=P["bg_1"],
+                fg=P["warning"],
+                font=FONTS["body_sm"],
+                anchor="w",
+            ).pack(anchor="w", padx=pad, pady=(0, SPACING["sm"]))
+
         text_frame = tk.Frame(dlg, bg=P["bg_2"], padx=8, pady=8)
         text_frame.pack(fill="both", expand=True, padx=pad, pady=(0, pad))
 
@@ -678,15 +700,25 @@ class SettingsPage(tk.Frame):
         btn_row = tk.Frame(dlg, bg=P["bg_1"])
         btn_row.pack(fill="x", padx=pad, pady=(0, pad))
 
-        if info.asset_url and info.asset_name:
+        if sys.platform == "win32" and info.asset_url and info.asset_name:
+            download_state = {"in_progress": False}
+
+            def start_download() -> None:
+                if download_state["in_progress"]:
+                    return
+                download_state["in_progress"] = True
+                self._download_and_run_update(info, download_btn, dlg, download_state)
+
             download_btn = SealButton(
                 btn_row,
                 text=t("btn_download_update"),
                 variant="primary",
-                command=lambda: self._download_and_run_update(info, download_btn, dlg),
+                command=start_download,
                 height=36,
             )
             download_btn.pack(side="left")
+            if download_immediately:
+                dlg.after_idle(start_download)
 
         SealButton(
             btn_row,
@@ -705,23 +737,45 @@ class SettingsPage(tk.Frame):
         ).pack(side="right")
 
     def _download_and_run_update(
-        self, info: AppReleaseInfo, btn: SealButton, dlg: tk.Toplevel
+        self,
+        info: AppReleaseInfo,
+        btn: SealButton,
+        dlg: tk.Toplevel,
+        download_state: dict[str, bool],
     ) -> None:
+        if not info.asset_url or not info.asset_name:
+            download_state["in_progress"] = False
+            messagebox.showerror("Update", t("update_asset_missing"))
+            return
+
         btn.configure_text(t("status_downloading"))
 
         def on_prog(_pct: float, msg: str) -> None:
-            self.after(0, lambda: btn.configure_text(msg[:20]))
+            if self.winfo_exists() and dlg.winfo_exists():
+                self.after(0, lambda: btn.configure_text(msg[:20]))
 
         def on_done(success: bool, path_or_err: str) -> None:
             def _apply() -> None:
+                if not self.winfo_exists() or not dlg.winfo_exists():
+                    download_state["in_progress"] = False
+                    return
                 if success:
-                    btn.configure_text(t("status_ready"))
-                    if sys.platform == "win32" and path_or_err.endswith(".exe"):
-                        os.startfile(path_or_err)
-                        dlg.destroy()
-                    else:
-                        messagebox.showinfo("Update", f"Update downloaded to:\n{path_or_err}")
+                    try:
+                        launch_app_installer(path_or_err)
+                    except (OSError, ValueError) as exc:
+                        download_state["in_progress"] = False
+                        btn.configure_text(t("btn_download_update"))
+                        messagebox.showerror(
+                            "Update",
+                            t("update_install_failed", error=str(exc)),
+                        )
+                        return
+
+                    settings.flush()
+                    dlg.destroy()
+                    self.winfo_toplevel().destroy()
                 else:
+                    download_state["in_progress"] = False
                     btn.configure_text(t("btn_download_update"))
                     messagebox.showerror("Update failed", path_or_err)
 

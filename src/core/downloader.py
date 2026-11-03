@@ -9,7 +9,7 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field
+from dataclasses import dataclass, field, replace
 from enum import Enum, auto
 from pathlib import Path
 
@@ -104,6 +104,7 @@ class DownloadTask:
     output_path: str = ""
     is_audio: bool = False
     is_subtitles: bool = False
+    subtitle_warning: bool = False
     prefs: DownloadPreferences = field(default_factory=DownloadPreferences)
     uploader: str = ""
     duration_str: str = ""
@@ -140,6 +141,40 @@ def _fmt_eta(seconds: int | None) -> str:
     if h:
         return f"{h:d}:{m:02d}:{s:02d}"
     return f"{m:02d}:{s:02d}"
+
+
+def _is_subtitle_error(error: Exception) -> bool:
+    message = str(error).casefold()
+    return "subtitle" in message or "subtitles" in message
+
+
+def _has_requested_subtitles(info: dict, prefs: DownloadPreferences) -> bool:
+    languages = [language.strip().casefold() for language in prefs.subtitle_languages.split(",")]
+    source = prefs.subtitle_source or "both"
+    entries = info.get("entries") or []
+    candidates = entries if info.get("_type") == "playlist" and entries else [info]
+
+    for candidate in candidates:
+        available: dict = {}
+        if source in ("manual", "both"):
+            available.update(candidate.get("subtitles") or {})
+        if source in ("auto", "both"):
+            available.update(candidate.get("automatic_captions") or {})
+
+        if "all" in languages and available:
+            return True
+
+        if any(
+            track.casefold() == language
+            or track.casefold().startswith(f"{language}-")
+            or language.startswith(f"{track.casefold()}-")
+            for language in languages
+            for track in available
+            if language
+        ):
+            return True
+
+    return False
 
 
 # ──────────────────────────────────────────────
@@ -257,6 +292,31 @@ class Downloader:
         task_id = self.queue_download(url, prefs)
         self.start_queue()
         return task_id
+
+    def retry_download(self, task_id: str) -> bool:
+        """Re-queue a failed task without creating a duplicate task or card."""
+        with self._lock:
+            task = self._tasks.get(task_id)
+            if not task or task.state != DownloadState.ERROR:
+                return False
+
+            if task_id in self._queue:
+                self._queue.remove(task_id)
+            task.state = DownloadState.QUEUED
+            task.progress = 0.0
+            task.speed = ""
+            task.eta = ""
+            task.size = ""
+            task.error = ""
+            task.output_path = ""
+            task.subtitle_warning = False
+            self._cancel_flags.pop(task_id, None)
+            self._pause_flags.pop(task_id, None)
+            self._queue.append(task_id)
+            self._update_task(task)
+
+        self.start_queue()
+        return True
 
     def start_queue(self) -> None:
         """Start sequential download processing for all queued tasks."""
@@ -577,12 +637,24 @@ class Downloader:
         ydl_opts = self._build_opts(task, prefs, cancel_ev, pause_ev)
 
         try:
-            retry_limit = 2 if prefs.subtitles_only else 1
-            for attempt in range(retry_limit):
+            reload_attempts = 0
+            subtitle_fallback_used = False
+            while True:
                 try:
                     with yt_dlp.YoutubeDL(ydl_opts) as ydl:
                         info = ydl.extract_info(task.url, download=False)
                         if info:
+                            if (
+                                prefs.embed_subtitles
+                                and not prefs.extract_audio
+                                and not prefs.subtitles_only
+                                and not subtitle_fallback_used
+                                and not _has_requested_subtitles(info, prefs)
+                            ):
+                                raise yt_dlp.utils.DownloadError(
+                                    "No subtitles are available for the requested languages"
+                                )
+
                             task.title = info.get("title") or task.url
                             task.thumbnail_url = info.get("thumbnail") or ""
                             is_pl = info.get("_type") == "playlist"
@@ -604,22 +676,43 @@ class Downloader:
 
                             ydl.download([task.url])
                     break
-                except yt_dlp.utils.DownloadError as exc:
+                except yt_dlp.utils.YoutubeDLError as exc:
                     reload_requested = "the page needs to be reloaded" in str(exc).casefold()
                     if (
-                        attempt + 1 >= retry_limit
+                        reload_attempts >= 1
                         or not prefs.subtitles_only
                         or not reload_requested
                         or cancel_ev.is_set()
                         or pause_ev.is_set()
                     ):
-                        raise
+                        if (
+                            subtitle_fallback_used
+                            or prefs.subtitles_only
+                            or not prefs.embed_subtitles
+                            or not _is_subtitle_error(exc)
+                            or cancel_ev.is_set()
+                            or pause_ev.is_set()
+                        ):
+                            raise
+
+                        _log.warning(
+                            "Optional subtitles failed for %s; retrying media without subtitles",
+                            task.url,
+                        )
+                        fallback_prefs = replace(prefs, embed_subtitles=False)
+                        ydl_opts = self._build_opts(task, fallback_prefs, cancel_ev, pause_ev)
+                        task.state = DownloadState.FETCHING_INFO
+                        self._update_task(task)
+                        subtitle_fallback_used = True
+                        continue
+
                     _log.warning(
                         "YouTube requested a page reload for subtitle download %s; retrying once",
                         task.url,
                     )
                     task.state = DownloadState.FETCHING_INFO
                     self._update_task(task)
+                    reload_attempts += 1
 
             if pause_ev.is_set():
                 task.state = DownloadState.PAUSED
@@ -628,6 +721,7 @@ class Downloader:
             else:
                 task.state = DownloadState.COMPLETED
                 task.progress = 1.0
+                task.subtitle_warning = subtitle_fallback_used
                 if task.output_path.endswith(".part"):
                     cleaned = task.output_path[:-5]
                     if Path(cleaned).exists():

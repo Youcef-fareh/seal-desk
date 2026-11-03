@@ -115,6 +115,25 @@ def test_downloader_queue_and_controls():
     assert dl.get_queued_count() == 0
 
 
+def test_downloader_retry_reuses_failed_task(monkeypatch):
+    dl = Downloader()
+    task = DownloadTask(
+        url="https://example.com/watch?v=retry",
+        state=DownloadState.ERROR,
+        error="temporary failure",
+    )
+    dl._tasks[task.task_id] = task
+    dl._queue.append(task.task_id)
+    monkeypatch.setattr(dl, "start_queue", lambda: None)
+
+    assert dl.retry_download(task.task_id) is True
+    assert dl.retry_download(task.task_id) is False
+    assert len(dl.get_tasks()) == 1
+    assert dl.get_tasks()[0].state == DownloadState.QUEUED
+    assert dl.get_queued_count() == 1
+    assert dl._queue.count(task.task_id) == 1
+
+
 def test_downloader_queue_toggle():
     dl = Downloader()
     assert dl.is_queue_running() is False
@@ -173,11 +192,11 @@ def test_ffmpeg_utils():
 
 
 def test_updater_version_check():
-    assert CURRENT_VERSION == "1.5.3"
+    assert CURRENT_VERSION == "1.5.4"
     assert is_newer_version("v1.5.1") is False
     assert is_newer_version("v1.5.2") is False
     assert is_newer_version("v1.5.3") is False
-    assert is_newer_version("v1.5.4") is True
+    assert is_newer_version("v1.5.5") is True
 
     assert _parse_version_tuple("v1.2.0") == (1, 2, 0)
     assert _parse_version_tuple("1.0.0") == (1, 0, 0)
@@ -367,6 +386,115 @@ def test_subtitles_retry_youtube_reload_error(monkeypatch):
     assert attempts == 2
     assert task.state == DownloadState.COMPLETED
     assert task.title == "Subtitled video"
+
+
+def test_embedded_subtitle_failure_retries_media_without_subtitles(monkeypatch):
+    import threading
+
+    import yt_dlp
+
+    dl = Downloader()
+    prefs = DownloadPreferences(embed_subtitles=True)
+    task = DownloadTask(url="https://example.com/watch?v=video", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    options_seen = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            options_seen.append(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            return {"title": "Video without subtitles"}
+
+        def download(self, urls):
+            if options_seen[-1].get("writesubtitles"):
+                raise yt_dlp.utils.PostProcessingError("Unable to embed subtitles")
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert len(options_seen) == 2
+    assert options_seen[0].get("writesubtitles") is True
+    assert not options_seen[1].get("writesubtitles")
+    assert task.state == DownloadState.COMPLETED
+    assert task.subtitle_warning is True
+    assert task.title == "Video without subtitles"
+
+
+def test_missing_subtitles_still_completes_media_download(monkeypatch):
+    import threading
+
+    dl = Downloader()
+    prefs = DownloadPreferences(embed_subtitles=True, subtitle_languages="en")
+    task = DownloadTask(url="https://example.com/watch?v=no-subs", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    options_seen = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            options_seen.append(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            return {"title": "No captions in source"}
+
+        def download(self, urls):
+            pass
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert len(options_seen) == 2
+    assert options_seen[0].get("writesubtitles") is True
+    assert not options_seen[1].get("writesubtitles")
+    assert task.state == DownloadState.COMPLETED
+    assert task.subtitle_warning is True
+
+
+def test_playlist_without_subtitles_retries_without_embedding(monkeypatch):
+    import threading
+
+    dl = Downloader()
+    prefs = DownloadPreferences(embed_subtitles=True, subtitle_languages="en")
+    task = DownloadTask(url="https://example.com/playlist?id=123", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    options_seen = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            options_seen.append(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            pass
+
+        def extract_info(self, url, download=False):
+            return {"_type": "playlist", "entries": [{"title": "No captions"}]}
+
+        def download(self, urls):
+            pass
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert len(options_seen) == 2
+    assert options_seen[0].get("writesubtitles") is True
+    assert not options_seen[1].get("writesubtitles")
+    assert task.state == DownloadState.COMPLETED
+    assert task.subtitle_warning is True
 
 
 def test_video_download_does_not_retry_youtube_reload_error(monkeypatch):

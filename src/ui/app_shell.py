@@ -6,7 +6,6 @@ Shell layout: sidebar + page router, bilingual support (EN/AR), and startup auto
 from __future__ import annotations
 
 import tkinter as tk
-import webbrowser
 from collections.abc import Callable
 from tkinter import messagebox
 
@@ -397,10 +396,14 @@ class AppShell(tk.Frame):
         self._update_banner.pack(**pack_kwargs)
 
     def _on_update_banner_click(self) -> None:
-        if self._latest_release_info:
-            if self._latest_release_info.html_url:
-                webbrowser.open(self._latest_release_info.html_url)
-            self._navigate("settings")
+        info = self._latest_release_info
+        if not info:
+            return
+
+        self._navigate("settings")
+        settings_page = self._pages.get("settings")
+        if isinstance(settings_page, SettingsPage):
+            settings_page._show_update_dialog(info, download_immediately=True)
 
     def _retranslate(self) -> None:
         """Update navigation text when language switches."""
