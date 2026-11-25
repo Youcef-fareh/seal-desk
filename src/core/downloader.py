@@ -9,14 +9,16 @@ from __future__ import annotations
 import threading
 import uuid
 from collections.abc import Callable
-from dataclasses import dataclass, field, replace
+from dataclasses import asdict, dataclass, field, fields, replace
 from enum import Enum, auto
 from pathlib import Path
 
 import yt_dlp
 
-from .ffmpeg_utils import get_ffmpeg_path, is_ffmpeg_available
+from .ffmpeg_utils import get_ffmpeg_path
+from .js_runtime import get_javascript_runtimes
 from .logger import YtDlpLogger, get_logger
+from .settings import settings
 
 _log = get_logger()
 
@@ -104,6 +106,7 @@ class DownloadTask:
     output_path: str = ""
     is_audio: bool = False
     is_subtitles: bool = False
+    is_playlist: bool = False
     subtitle_warning: bool = False
     prefs: DownloadPreferences = field(default_factory=DownloadPreferences)
     uploader: str = ""
@@ -188,7 +191,7 @@ class Downloader:
     Manages task lifecycles: Queued -> Fetching -> Downloading -> Paused / Completed.
     """
 
-    def __init__(self, max_concurrent_downloads: int = 1) -> None:
+    def __init__(self, max_concurrent_downloads: int = 1, persist_queue: bool = False) -> None:
         self._tasks: dict[str, DownloadTask] = {}
         self._queue: list[str] = []  # Ordered task_ids
         self._threads: dict[str, threading.Thread] = {}
@@ -200,6 +203,7 @@ class Downloader:
         # Semaphore controlling how many tasks may download simultaneously
         self._max_concurrent = max(1, max_concurrent_downloads)
         self._dl_semaphore = threading.Semaphore(self._max_concurrent)
+        self._persist_queue_enabled = persist_queue
         # Track all currently active (running) task IDs
         self._active_task_ids: set[str] = set()
 
@@ -208,6 +212,8 @@ class Downloader:
         self.on_info_fetched: Callable[[VideoInfo], None] = lambda _: None
         self.on_error: Callable[[str, str], None] = lambda _id, _msg: None
         self.on_queue_status_changed: Callable[[bool], None] = lambda _: None
+        if self._persist_queue_enabled:
+            self._restore_pending_queue()
 
     # ── Public API ────────────────────────────
 
@@ -262,6 +268,7 @@ class Downloader:
             self._tasks[task.task_id] = task
             self._queue.append(task.task_id)
 
+        self._persist_queue()
         self._update_task(task)
 
         # Pre-fetch metadata in background so queue items display title, size, and quality
@@ -275,8 +282,30 @@ class Downloader:
         # If queue is already running, advance queue
         if self._queue_running and not self._active_task_id:
             self._process_next_in_queue()
-
         return task.task_id
+
+    @staticmethod
+    def _validate_download_result(
+        info: dict, task: DownloadTask, prefs: DownloadPreferences
+    ) -> None:
+        if prefs.subtitles_only:
+            return
+
+        requested_formats = info.get("requested_formats") or []
+        if len(requested_formats) < 2:
+            return
+
+        output_path = Path(task.output_path) if task.output_path else None
+        if output_path is None or not output_path.is_file():
+            raise yt_dlp.utils.DownloadError(
+                "The media streams downloaded, but the merged output file was not found."
+            )
+
+        format_ids = {str(fmt.get("format_id", "")) for fmt in requested_formats}
+        if any(output_path.stem.endswith(f".f{format_id}") for format_id in format_ids):
+            raise yt_dlp.utils.DownloadError(
+                "The media streams downloaded, but yt-dlp did not merge them into one file."
+            )
 
     def set_max_concurrent(self, n: int) -> None:
         """Adjust the maximum number of simultaneous downloads at runtime."""
@@ -300,8 +329,6 @@ class Downloader:
             if not task or task.state != DownloadState.ERROR:
                 return False
 
-            if task_id in self._queue:
-                self._queue.remove(task_id)
             task.state = DownloadState.QUEUED
             task.progress = 0.0
             task.speed = ""
@@ -312,9 +339,11 @@ class Downloader:
             task.subtitle_warning = False
             self._cancel_flags.pop(task_id, None)
             self._pause_flags.pop(task_id, None)
-            self._queue.append(task_id)
+            if task_id not in self._queue:
+                self._queue.append(task_id)
             self._update_task(task)
 
+        self._persist_queue()
         self.start_queue()
         return True
 
@@ -348,6 +377,7 @@ class Downloader:
             if task.state == DownloadState.QUEUED:
                 task.state = DownloadState.PAUSED
                 self._update_task(task)
+                self._persist_queue()
                 return
 
             if task.state in (
@@ -361,6 +391,7 @@ class Downloader:
                 if task_id in self._cancel_flags:
                     self._cancel_flags[task_id].set()
                 self._update_task(task)
+                self._persist_queue()
 
     def resume_download(self, task_id: str) -> None:
         """Resume a paused task without forcibly restarting a stopped queue."""
@@ -372,6 +403,7 @@ class Downloader:
             self._update_task(task)
             should_resume_queue = self._queue_running
 
+        self._persist_queue()
         self.on_queue_status_changed(should_resume_queue)
         # Only continue the queue if it was already running; a paused task should
         # remain queued until the queue is explicitly started again.
@@ -392,6 +424,7 @@ class Downloader:
                 self._update_task(task)
         if ev:
             ev.set()
+        self._persist_queue()
 
     def delete_task(self, task_id: str) -> None:
         """Completely remove a task from memory and queue, cancelling if active."""
@@ -407,6 +440,7 @@ class Downloader:
             if was_active:
                 self._active_task_id = None
 
+        self._persist_queue()
         # Always advance queue when running — not only when the deleted task was
         # the active one. Fixes B1: deleting a PAUSED/QUEUED task while another
         # download was active would leave the queue frozen.
@@ -440,6 +474,7 @@ class Downloader:
                 self._threads.pop(k, None)
                 self._cancel_flags.pop(k, None)
                 self._pause_flags.pop(k, None)
+        self._persist_queue()
 
     def reorder_queue(self, task_id: str, direction: int) -> bool:
         """
@@ -447,14 +482,120 @@ class Downloader:
         Returns True if moved, False otherwise.
         """
         with self._lock:
-            if task_id not in self._queue:
+            queued_ids = self._queued_ids_locked()
+            if task_id not in queued_ids:
                 return False
-            idx = self._queue.index(task_id)
-            new_idx = idx + direction
-            if 0 <= new_idx < len(self._queue):
-                self._queue[idx], self._queue[new_idx] = self._queue[new_idx], self._queue[idx]
-                return True
-            return False
+            new_idx = queued_ids.index(task_id) + direction
+            if not 0 <= new_idx < len(queued_ids):
+                return False
+            queued_ids.remove(task_id)
+            queued_ids.insert(new_idx, task_id)
+            self._replace_queued_order_locked(queued_ids)
+        self._persist_queue()
+        return True
+
+    def move_queue_item(self, task_id: str, position: int) -> bool:
+        """Move a queued task to a zero-based position among queued tasks."""
+        with self._lock:
+            queued_ids = self._queued_ids_locked()
+            if task_id not in queued_ids or not queued_ids:
+                return False
+            target = max(0, min(position, len(queued_ids) - 1))
+            queued_ids.remove(task_id)
+            queued_ids.insert(target, task_id)
+            self._replace_queued_order_locked(queued_ids)
+        self._persist_queue()
+        return True
+
+    def get_queue_positions(self) -> dict[str, int]:
+        """Return one-based positions for queued tasks."""
+        with self._lock:
+            return {task_id: index for index, task_id in enumerate(self._queued_ids_locked(), 1)}
+
+    def get_queue_order(self) -> list[str]:
+        """Return queued task IDs in their current execution order."""
+        with self._lock:
+            return self._queued_ids_locked()
+
+    def _queued_ids_locked(self) -> list[str]:
+        return [
+            task_id
+            for task_id in self._queue
+            if (task := self._tasks.get(task_id)) and task.state == DownloadState.QUEUED
+        ]
+
+    def _replace_queued_order_locked(self, queued_ids: list[str]) -> None:
+        replacements = iter(queued_ids)
+        queued_set = set(queued_ids)
+        self._queue = [
+            next(replacements) if task_id in queued_set else task_id for task_id in self._queue
+        ]
+
+    def _restore_pending_queue(self) -> None:
+        pending = settings.get("pending_downloads", [])
+        if not isinstance(pending, list):
+            _log.warning("Ignoring invalid persisted download queue")
+            return
+
+        valid_pref_names = {item.name for item in fields(DownloadPreferences)}
+        for record in pending:
+            if not isinstance(record, dict):
+                continue
+            url = record.get("url")
+            if not isinstance(url, str) or not url:
+                continue
+            raw_prefs = record.get("prefs")
+            if not isinstance(raw_prefs, dict):
+                raw_prefs = {}
+            prefs_data = {key: value for key, value in raw_prefs.items() if key in valid_pref_names}
+            try:
+                prefs = DownloadPreferences(**prefs_data)
+            except (TypeError, ValueError) as exc:
+                _log.warning("Skipping a queued download with invalid preferences: %s", exc)
+                continue
+
+            task_id = record.get("task_id")
+            if not isinstance(task_id, str) or not task_id or task_id in self._tasks:
+                task_id = str(uuid.uuid4())
+            was_paused = record.get("state") == DownloadState.PAUSED.name
+            task = DownloadTask(
+                task_id=task_id,
+                url=url,
+                title=str(record.get("title") or "Unknown"),
+                state=DownloadState.PAUSED if was_paused else DownloadState.QUEUED,
+                is_audio=prefs.extract_audio and not prefs.subtitles_only,
+                is_subtitles=prefs.subtitles_only,
+                is_playlist=bool(record.get("is_playlist", False)),
+                prefs=prefs,
+            )
+            self._tasks[task_id] = task
+            self._queue.append(task_id)
+
+        if self._tasks:
+            _log.info("Restored %d pending download(s) from the previous session", len(self._tasks))
+
+    def _persist_queue(self) -> None:
+        if not self._persist_queue_enabled:
+            return
+        terminal_states = {
+            DownloadState.COMPLETED,
+            DownloadState.CANCELLED,
+            DownloadState.ERROR,
+        }
+        with self._lock:
+            pending = [
+                {
+                    "task_id": task.task_id,
+                    "url": task.url,
+                    "title": task.title,
+                    "state": task.state.name,
+                    "is_playlist": task.is_playlist,
+                    "prefs": asdict(task.prefs),
+                }
+                for task_id in self._queue
+                if (task := self._tasks.get(task_id)) and task.state not in terminal_states
+            ]
+        settings.set("pending_downloads", pending)
 
     # ── Queue Runner ──────────────────────────
 
@@ -503,6 +644,7 @@ class Downloader:
                 self._active_task_id = None
             self._active_task_ids.discard(task_id)
 
+        self._persist_queue()
         if self._queue_running:
             # Potentially start the next task now that a slot has freed up
             self._process_next_in_queue()
@@ -566,6 +708,8 @@ class Downloader:
 
                 entries = info.get("entries") or []
                 first = entries[0] if entries else info
+                task.is_playlist = info.get("_type") == "playlist"
+                task.playlist_count = len(entries) if task.is_playlist else 0
 
                 # Title
                 raw_title = info.get("title") or first.get("title")
@@ -619,6 +763,7 @@ class Downloader:
                         task.size = task.estimated_size
 
             self._update_task(task)
+            self._persist_queue()
 
         except Exception:  # noqa: BLE001
             pass
@@ -641,40 +786,58 @@ class Downloader:
             subtitle_fallback_used = False
             while True:
                 try:
-                    with yt_dlp.YoutubeDL(ydl_opts) as ydl:
-                        info = ydl.extract_info(task.url, download=False)
-                        if info:
-                            if (
-                                prefs.embed_subtitles
-                                and not prefs.extract_audio
-                                and not prefs.subtitles_only
-                                and not subtitle_fallback_used
-                                and not _has_requested_subtitles(info, prefs)
-                            ):
-                                raise yt_dlp.utils.DownloadError(
-                                    "No subtitles are available for the requested languages"
-                                )
+                    download_error: yt_dlp.utils.YoutubeDLError | None = None
+                    try:
+                        with yt_dlp.YoutubeDL(ydl_opts) as ydl:
+                            try:
+                                info = ydl.extract_info(task.url, download=False)
+                                if info:
+                                    if (
+                                        prefs.embed_subtitles
+                                        and not prefs.extract_audio
+                                        and not prefs.subtitles_only
+                                        and not subtitle_fallback_used
+                                        and not _has_requested_subtitles(info, prefs)
+                                    ):
+                                        raise yt_dlp.utils.DownloadError(
+                                            "No subtitles are available for the requested languages"
+                                        )
 
-                            task.title = info.get("title") or task.url
-                            task.thumbnail_url = info.get("thumbnail") or ""
-                            is_pl = info.get("_type") == "playlist"
-                            if is_pl:
-                                task.playlist_count = len(info.get("entries") or [])
-                                task.state = DownloadState.DOWNLOADING_PLAYLIST
-                            else:
-                                task.state = DownloadState.DOWNLOADING
-                            self._update_task(task)
+                                    task.title = info.get("title") or task.url
+                                    task.thumbnail_url = info.get("thumbnail") or ""
+                                    is_pl = info.get("_type") == "playlist"
+                                    task.is_playlist = is_pl
+                                    if is_pl:
+                                        task.playlist_count = len(info.get("entries") or [])
+                                        task.state = DownloadState.DOWNLOADING_PLAYLIST
+                                    else:
+                                        task.state = DownloadState.DOWNLOADING
+                                    self._update_task(task)
 
-                            if cancel_ev.is_set():
-                                task.state = (
-                                    DownloadState.PAUSED
-                                    if pause_ev.is_set()
-                                    else DownloadState.CANCELLED
-                                )
-                                self._update_task(task)
-                                return
+                                    if cancel_ev.is_set():
+                                        task.state = (
+                                            DownloadState.PAUSED
+                                            if pause_ev.is_set()
+                                            else DownloadState.CANCELLED
+                                        )
+                                        self._update_task(task)
+                                        return
 
-                            ydl.download([task.url])
+                                    ydl.download([task.url])
+                                    self._validate_download_result(info, task, prefs)
+                            except yt_dlp.utils.YoutubeDLError as exc:
+                                download_error = exc
+                    except OSError as exc:
+                        if download_error is None:
+                            raise
+                        _log.warning(
+                            "Failed to save yt-dlp cookies after download error for %s: %s",
+                            task.url,
+                            exc,
+                        )
+
+                    if download_error is not None:
+                        raise download_error
                     break
                 except yt_dlp.utils.YoutubeDLError as exc:
                     reload_requested = "the page needs to be reloaded" in str(exc).casefold()
@@ -849,6 +1012,9 @@ class Downloader:
         ffmpeg_bin = get_ffmpeg_path()
         if ffmpeg_bin:
             opts["ffmpeg_location"] = ffmpeg_bin
+        js_runtimes = get_javascript_runtimes()
+        if js_runtimes:
+            opts["js_runtimes"] = js_runtimes
 
         return opts
 
@@ -883,7 +1049,7 @@ class Downloader:
             }
         )
 
-        has_ffmpeg = is_ffmpeg_available()
+        has_ffmpeg = bool(opts.get("ffmpeg_location"))
 
         if prefs.subtitles_only:
             opts["skip_download"] = True
@@ -999,9 +1165,9 @@ class Downloader:
             else:
                 # WITHOUT ffmpeg: yt-dlp CANNOT merge separate video and audio streams!
                 # If we used bestvideo+bestaudio, it would leave two unmerged files.
-                # Therefore, we MUST request a pre-muxed format containing BOTH video and audio!
+                # Therefore, only request a pre-muxed format containing both streams.
                 if prefs.video_quality == "best":
-                    fmt = "best[ext=mp4]/best/bestvideo[ext=mp4]+bestaudio[ext=m4a]"
+                    fmt = "best[ext=mp4]/best"
                 else:
                     h = prefs.video_quality
                     fmt = f"best[height<={h}][ext=mp4]/best[height<={h}]/best"
@@ -1033,4 +1199,4 @@ class Downloader:
 
 
 # ── Singleton ─────────────────────────────────
-downloader = Downloader()
+downloader = Downloader(persist_queue=True)

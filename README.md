@@ -52,7 +52,7 @@ Download from **1000+ sites** including YouTube, SoundCloud, Twitch, Twitter/X, 
 ## ⬇️ Installation
 
 ### Windows
-Download `SealDesktop-*-Setup.exe` from [Releases](https://github.com/your-username/seal-desktop/releases/latest) and run it.
+Download `SealDesktop-*-Setup.exe` from [Releases](https://github.com/Youcef-fareh/seal-desk/releases/latest) and run it.
 
 ### macOS
 Download `SealDesktop-*-macos.dmg`, open it, and drag **Seal Desktop** to Applications.
@@ -101,7 +101,7 @@ When Seal Desktop launches, it starts a lightweight local REST API on `http://12
 ## 🛠 Running from Source
 
 ```bash
-git clone https://github.com/your-username/seal-desktop
+git clone https://github.com/Youcef-fareh/seal-desk.git
 cd seal-desktop
 
 # Create virtual environment
@@ -136,6 +136,19 @@ git push origin v1.0.0
 ```
 
 This automatically builds and publishes a GitHub Release for all three platforms.
+
+## YouTube downloads and diagnostics
+
+Seal Desktop detects supported JavaScript runtimes (Deno, Node.js, Bun, or QuickJS)
+for yt-dlp. If a YouTube download reports that a JavaScript runtime is missing,
+install one and make it available on `PATH` before starting the app. Release
+build workflows install and bundle Deno; manual builds bundle it when it is
+available on the build machine, otherwise they use a runtime installed on the
+user's system.
+
+The pending download queue is saved locally and restored on the next launch.
+Use **Export Diagnostics** on the download page to share a sanitized log copy;
+the original application log is not modified.
 
 ## 🗂 Project Structure
 

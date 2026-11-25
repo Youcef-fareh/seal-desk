@@ -73,6 +73,8 @@ DEFAULTS: dict[str, Any] = {
     "window_y": -1,
     # History
     "history": [],
+    # Pending work is stored locally so queue order survives an app restart.
+    "pending_downloads": [],
 }
 
 

@@ -24,7 +24,8 @@ from ...core.downloader import (
 )
 from ...core.ffmpeg_utils import download_ffmpeg_async, is_ffmpeg_available
 from ...core.i18n import add_language_listener, remove_language_listener, t
-from ...core.logger import YtDlpLogger
+from ...core.js_runtime import get_javascript_runtimes
+from ...core.logger import YtDlpLogger, export_sanitized_log
 from ...core.notifications import send_notification
 from ...core.settings import settings
 from ..theme import FONTS, SPACING
@@ -49,12 +50,14 @@ class DownloadCard(SealCard):
         parent: tk.Widget,
         task: DownloadTask,
         on_delete: Callable[[str], None],
-        on_move: Callable[[str, int], None] | None = None,
+        on_move: Callable[[str, str], None] | None = None,
+        on_drag_drop: Callable[[str, int], None] | None = None,
     ) -> None:
         super().__init__(parent)
         self.task = task
         self._on_delete = on_delete
         self._on_move = on_move
+        self._on_drag_drop = on_drag_drop
         self._build()
 
     def _build(self) -> None:
@@ -65,10 +68,23 @@ class DownloadCard(SealCard):
         row1 = tk.Frame(self, bg=P["bg_1"])
         row1.pack(fill="x")
 
+        self._drag_handle = tk.Label(
+            row1,
+            text="⠿",
+            bg=P["bg_1"],
+            fg=P["text_tertiary"],
+            font=FONTS["heading3"],
+            cursor="fleur",
+        )
+        self._drag_handle.pack(side="left", padx=(0, SPACING["xs"]))
+        self._drag_handle.bind("<ButtonRelease-1>", self._drop_dragged_item)
+
         if getattr(self.task, "is_subtitles", False):
             type_icon = "💬"
         elif self.task.is_audio:
             type_icon = "🎵"
+        elif self.task.is_playlist:
+            type_icon = "📑"
         else:
             type_icon = "🎬"
         self._title_lbl = tk.Label(
@@ -99,6 +115,24 @@ class DownloadCard(SealCard):
             text="▼",
             variant="ghost",
             command=self._move_down,
+            width=26,
+            height=28,
+        )
+
+        self._top_btn = SealButton(
+            self._actions_frame,
+            text="⇈",
+            variant="ghost",
+            command=self._move_to_top,
+            width=26,
+            height=28,
+        )
+
+        self._bottom_btn = SealButton(
+            self._actions_frame,
+            text="⇊",
+            variant="ghost",
+            command=self._move_to_bottom,
             width=26,
             height=28,
         )
@@ -184,13 +218,11 @@ class DownloadCard(SealCard):
         self._separator.pack(fill="x", pady=(pad, 0))
 
         if self.task.subtitle_warning:
-            self._subtitle_warning_lbl.pack(
-                fill="x", pady=(3, 0), before=self._separator
-            )
+            self._subtitle_warning_lbl.pack(fill="x", pady=(3, 0), before=self._separator)
 
         self.refresh(self.task)
 
-    def refresh(self, task: DownloadTask) -> None:
+    def refresh(self, task: DownloadTask, queue_position: int | None = None) -> None:
         self.task = task
 
         state_labels = {
@@ -209,12 +241,16 @@ class DownloadCard(SealCard):
             DownloadState.ERROR: (t("state_error"), P["error"]),
         }
         label, color = state_labels.get(task.state, ("…", P["text_secondary"]))
+        if task.state == DownloadState.QUEUED and queue_position is not None:
+            label = f"{label} · {t('queue_position', position=queue_position)}"
 
         title_text = task.title[:80] if task.title else task.url[:80]
         if getattr(task, "is_subtitles", False):
             type_icon = "💬"
         elif task.is_audio:
             type_icon = "🎵"
+        elif task.is_playlist:
+            type_icon = "📑"
         else:
             type_icon = "🎬"
         self._title_lbl.configure(text=f"{type_icon}  {title_text}")
@@ -247,9 +283,7 @@ class DownloadCard(SealCard):
 
         if task.subtitle_warning:
             self._subtitle_warning_lbl.configure(text=t("subtitle_unavailable"))
-            self._subtitle_warning_lbl.pack(
-                fill="x", pady=(3, 0), before=self._separator
-            )
+            self._subtitle_warning_lbl.pack(fill="x", pady=(3, 0), before=self._separator)
         else:
             self._subtitle_warning_lbl.pack_forget()
 
@@ -259,9 +293,15 @@ class DownloadCard(SealCard):
         if task.state == DownloadState.QUEUED and self._on_move:
             self._up_btn.pack(side="left", padx=(2, 0))
             self._down_btn.pack(side="left", padx=(2, 0))
+            self._top_btn.pack(side="left", padx=(2, 0))
+            self._bottom_btn.pack(side="left", padx=(2, 0))
+            self._drag_handle.pack(side="left", padx=(0, SPACING["xs"]))
         else:
             self._up_btn.pack_forget()
             self._down_btn.pack_forget()
+            self._top_btn.pack_forget()
+            self._bottom_btn.pack_forget()
+            self._drag_handle.pack_forget()
 
         if task.state == DownloadState.PAUSED:
             self._pause_btn.configure_text("▶")
@@ -294,11 +334,23 @@ class DownloadCard(SealCard):
 
     def _move_up(self) -> None:
         if self._on_move:
-            self._on_move(self.task.task_id, -1)
+            self._on_move(self.task.task_id, "up")
 
     def _move_down(self) -> None:
         if self._on_move:
-            self._on_move(self.task.task_id, 1)
+            self._on_move(self.task.task_id, "down")
+
+    def _move_to_top(self) -> None:
+        if self._on_move:
+            self._on_move(self.task.task_id, "top")
+
+    def _move_to_bottom(self) -> None:
+        if self._on_move:
+            self._on_move(self.task.task_id, "bottom")
+
+    def _drop_dragged_item(self, event: tk.Event) -> None:
+        if self._on_drag_drop and self.task.state == DownloadState.QUEUED:
+            self._on_drag_drop(self.task.task_id, event.y_root)
 
     def _toggle_pause(self) -> None:
         if self.task.state == DownloadState.PAUSED:
@@ -338,6 +390,9 @@ class DownloadPage(tk.Frame):
         super().__init__(parent, bg=P["bg_0"])
         self._nav = nav_callback
         self._task_cards: dict[str, DownloadCard] = {}
+        self._queue_status_filter = "all"
+        self._queue_type_filter = "all"
+        self._queue_search_var = tk.StringVar()
         self._prefs = self._load_prefs()
 
         downloader.on_task_updated = self._on_task_updated
@@ -602,6 +657,15 @@ class DownloadPage(tk.Frame):
         )
         self._clear_btn.pack(side="right")
 
+        self._export_log_btn = SealButton(
+            controls_bar,
+            text=t("btn_export_log"),
+            variant="ghost",
+            command=self._export_diagnostic_log,
+            height=28,
+        )
+        self._export_log_btn.pack(side="right", padx=(0, SPACING["sm"]))
+
         self._queue_toggle_btn = SealButton(
             controls_bar,
             text=t("btn_start_queue"),
@@ -610,6 +674,77 @@ class DownloadPage(tk.Frame):
             height=28,
         )
         self._queue_toggle_btn.pack(side="right", padx=(0, SPACING["sm"]))
+
+        filter_bar = tk.Frame(self, bg=P["bg_0"])
+        filter_bar.pack(fill="x", padx=SPACING["lg"], pady=(SPACING["sm"], 0))
+
+        self._queue_search_hint = tk.Label(
+            filter_bar,
+            text=t("queue_search_placeholder"),
+            bg=P["bg_0"],
+            fg=P["text_secondary"],
+            font=FONTS["caption"],
+        )
+        self._queue_search_hint.pack(side="left", padx=(0, SPACING["xs"]))
+
+        self._queue_search_entry = tk.Entry(
+            filter_bar,
+            textvariable=self._queue_search_var,
+            bg=P["entry_bg"],
+            fg=P["text_primary"],
+            insertbackground=P["accent"],
+            relief="flat",
+            font=FONTS["body_sm"],
+            width=28,
+        )
+        self._queue_search_entry.pack(side="left", padx=(0, SPACING["sm"]), ipady=5)
+        self._queue_search_var.trace_add("write", lambda *_: self._apply_task_filters())
+
+        self._status_filter_var = tk.StringVar(value=t("queue_filter_all"))
+        self._status_filter_menu = tk.OptionMenu(
+            filter_bar,
+            self._status_filter_var,
+            t("queue_filter_all"),
+        )
+        self._status_filter_menu.pack(side="left", padx=(0, SPACING["xs"]))
+        self._build_filter_menu(
+            self._status_filter_menu,
+            "queue_filter",
+            ("all", "active", "queued", "paused", "finished", "failed"),
+            self._set_status_filter,
+        )
+        self._style_menu(self._status_filter_menu)
+
+        self._type_filter_var = tk.StringVar(value=t("queue_type_all"))
+        self._type_filter_menu = tk.OptionMenu(
+            filter_bar,
+            self._type_filter_var,
+            t("queue_type_all"),
+        )
+        self._type_filter_menu.pack(side="left", padx=(0, SPACING["sm"]))
+        self._build_filter_menu(
+            self._type_filter_menu,
+            "queue_type",
+            ("all", "video", "audio", "subtitles", "playlist"),
+            self._set_type_filter,
+        )
+        self._style_menu(self._type_filter_menu)
+
+        js_runtimes = get_javascript_runtimes()
+        runtime_text = (
+            t("js_runtime_ready", runtime=", ".join(name.title() for name in js_runtimes))
+            if js_runtimes
+            else t("js_runtime_missing")
+        )
+        self._js_runtime_lbl = tk.Label(
+            filter_bar,
+            text=runtime_text,
+            bg=P["bg_0"],
+            fg=P["text_secondary"] if js_runtimes else P["warning"],
+            font=FONTS["caption"],
+            anchor="e",
+        )
+        self._js_runtime_lbl.pack(side="right", padx=(SPACING["sm"], 0))
 
         # ── Downloads scroll list area ──────────────
         self._scroll = SealScrollFrame(self)
@@ -624,6 +759,14 @@ class DownloadPage(tk.Frame):
             justify="center",
         )
         self._empty_lbl.pack(expand=True, pady=60)
+        self._no_results_lbl = tk.Label(
+            self._scroll.inner,
+            text=t("queue_no_results"),
+            bg=P["bg_0"],
+            fg=P["text_tertiary"],
+            font=FONTS["body"],
+            justify="center",
+        )
 
         # Populate any existing tasks
         for task in downloader.get_tasks():
@@ -706,6 +849,156 @@ class DownloadPage(tk.Frame):
             activeforeground="white",
             font=FONTS["body"],
             bd=0,
+        )
+
+    def _build_filter_menu(
+        self,
+        menu: tk.OptionMenu,
+        key_prefix: str,
+        values: tuple[str, ...],
+        callback: Callable[[str], None],
+    ) -> None:
+        menu["menu"].delete(0, "end")
+        for value in values:
+            menu["menu"].add_command(
+                label=t(f"{key_prefix}_{value}"),
+                command=lambda selected=value: callback(selected),
+            )
+
+    def _set_status_filter(self, value: str) -> None:
+        self._queue_status_filter = value
+        self._status_filter_var.set(t(f"queue_filter_{value}"))
+        self._apply_task_filters()
+
+    def _set_type_filter(self, value: str) -> None:
+        self._queue_type_filter = value
+        self._type_filter_var.set(t(f"queue_type_{value}"))
+        self._apply_task_filters()
+
+    def _task_matches_filters(self, task: DownloadTask) -> bool:
+        active_states = {
+            DownloadState.FETCHING_INFO,
+            DownloadState.DOWNLOADING,
+            DownloadState.DOWNLOADING_PLAYLIST,
+            DownloadState.CONVERTING,
+        }
+        status_filter = self._queue_status_filter
+        if status_filter == "active" and task.state not in active_states:
+            return False
+        if status_filter == "queued" and task.state != DownloadState.QUEUED:
+            return False
+        if status_filter == "paused" and task.state != DownloadState.PAUSED:
+            return False
+        if status_filter == "finished" and task.state not in (
+            DownloadState.COMPLETED,
+            DownloadState.CANCELLED,
+        ):
+            return False
+        if status_filter == "failed" and task.state != DownloadState.ERROR:
+            return False
+
+        type_filter = self._queue_type_filter
+        if type_filter == "video" and (task.is_audio or task.is_subtitles):
+            return False
+        if type_filter == "audio" and not task.is_audio:
+            return False
+        if type_filter == "subtitles" and not task.is_subtitles:
+            return False
+        if type_filter == "playlist" and not task.is_playlist:
+            return False
+
+        query = self._queue_search_var.get().strip().casefold()
+        if query:
+            searchable = " ".join(
+                (task.title, task.url, task.uploader, task.quality_label)
+            ).casefold()
+            if query not in searchable:
+                return False
+        return True
+
+    def _ordered_task_ids(self) -> list[str]:
+        tasks = {task.task_id: task for task in downloader.get_tasks()}
+        queue_order = downloader.get_queue_order()
+        state_groups = (
+            {
+                DownloadState.FETCHING_INFO,
+                DownloadState.DOWNLOADING,
+                DownloadState.DOWNLOADING_PLAYLIST,
+                DownloadState.CONVERTING,
+            },
+            {DownloadState.QUEUED},
+            {DownloadState.PAUSED},
+            {DownloadState.COMPLETED, DownloadState.CANCELLED},
+            {DownloadState.ERROR},
+        )
+        ordered: list[str] = []
+        for states in state_groups:
+            if states == {DownloadState.QUEUED}:
+                ordered.extend(task_id for task_id in queue_order if task_id in tasks)
+            else:
+                ordered.extend(
+                    task_id
+                    for task_id, task in tasks.items()
+                    if task.state in states and task_id not in ordered
+                )
+        ordered.extend(task_id for task_id in tasks if task_id not in ordered)
+        return ordered
+
+    def _apply_single_task_filter(self, card: DownloadCard) -> None:
+        if self._task_matches_filters(card.task):
+            if not card.winfo_manager():
+                card.pack(fill="x", pady=(0, SPACING["md"]))
+        else:
+            card.pack_forget()
+
+    def _apply_task_filters(self) -> None:
+        tasks = downloader.get_tasks()
+        for card in self._task_cards.values():
+            card.pack_forget()
+
+        if not tasks:
+            self._no_results_lbl.pack_forget()
+            self._empty_lbl.pack(expand=True, pady=60)
+            return
+
+        self._empty_lbl.pack_forget()
+        queue_positions = downloader.get_queue_positions()
+        visible = 0
+        task_map = {task.task_id: task for task in tasks}
+        for task_id in self._ordered_task_ids():
+            card = self._task_cards.get(task_id)
+            task = task_map.get(task_id)
+            if not card or not task or not self._task_matches_filters(task):
+                continue
+            card.refresh(task, queue_positions.get(task_id))
+            card.pack(fill="x", pady=(0, SPACING["md"]))
+            visible += 1
+
+        if visible:
+            self._no_results_lbl.pack_forget()
+        else:
+            self._no_results_lbl.pack(expand=True, pady=60)
+
+    def _export_diagnostic_log(self) -> None:
+        destination = filedialog.asksaveasfilename(
+            title=t("diagnostic_export_title"),
+            defaultextension=".txt",
+            initialfile="seal_desktop_diagnostics.txt",
+            filetypes=(("Text files", "*.txt"),),
+        )
+        if not destination:
+            return
+        try:
+            exported = export_sanitized_log(destination)
+        except OSError as exc:
+            messagebox.showerror(
+                t("diagnostic_export_title"),
+                t("diagnostic_export_failed", error=str(exc)),
+            )
+            return
+        messagebox.showinfo(
+            t("diagnostic_export_title"),
+            t("diagnostic_export_success", path=str(exported)),
         )
 
     # ── Actions ───────────────────────────────
@@ -798,6 +1091,7 @@ class DownloadPage(tk.Frame):
                 DownloadState.DOWNLOADING,
                 DownloadState.DOWNLOADING_PLAYLIST,
                 DownloadState.FETCHING_INFO,
+                DownloadState.CONVERTING,
             )
         )
         if q_count or active_count:
@@ -811,8 +1105,11 @@ class DownloadPage(tk.Frame):
         self.after(0, self._refresh_card, task)
 
     def _refresh_card(self, task: DownloadTask) -> None:
-        if task.task_id in self._task_cards:
-            self._task_cards[task.task_id].refresh(task)
+        card = self._task_cards.get(task.task_id)
+        previous_state = card.task.state if card else None
+        if card:
+            position = downloader.get_queue_positions().get(task.task_id)
+            card.refresh(task, position)
         else:
             self._create_card(task)
 
@@ -864,32 +1161,65 @@ class DownloadPage(tk.Frame):
                         t("unsupported_site_title"),
                         t("unsupported_site_msg"),
                     )
+        if previous_state != task.state:
+            self._apply_task_filters()
+        elif card:
+            self._apply_single_task_filter(card)
         self._update_queue_label()
 
     def _create_card(self, task: DownloadTask) -> None:
         if task.task_id in self._task_cards:
-            self._task_cards[task.task_id].refresh(task)
+            self._task_cards[task.task_id].refresh(
+                task, downloader.get_queue_positions().get(task.task_id)
+            )
             return
 
-        self._empty_lbl.pack_forget()
         card = DownloadCard(
             self._scroll.inner,
             task,
             on_delete=self._delete_task,
             on_move=self._move_task,
+            on_drag_drop=self._move_task_to_y,
         )
-        card.pack(fill="x", pady=(0, SPACING["md"]))
         self._task_cards[task.task_id] = card
+        self._apply_task_filters()
 
-    def _move_task(self, task_id: str, direction: int) -> None:
-        if downloader.reorder_queue(task_id, direction):
-            with downloader._lock:
-                q_order = list(downloader._queue)
-            for tid in q_order:
-                if tid in self._task_cards:
-                    card = self._task_cards[tid]
-                    card.pack_forget()
-                    card.pack(fill="x", pady=(0, SPACING["md"]))
+    def _move_task(self, task_id: str, operation: str) -> None:
+        if operation in ("up", "down"):
+            moved = downloader.reorder_queue(task_id, -1 if operation == "up" else 1)
+        else:
+            positions = downloader.get_queue_positions()
+            if task_id not in positions:
+                return
+            target = 0 if operation == "top" else len(positions) - 1
+            moved = downloader.move_queue_item(task_id, target)
+        if moved:
+            self._apply_task_filters()
+
+    def _move_task_to_y(self, task_id: str, y_root: int) -> None:
+        queued_order = [
+            queued_id for queued_id in downloader.get_queue_order() if queued_id != task_id
+        ]
+        queued_cards = [
+            card
+            for card in self._task_cards.values()
+            if card.task.state == DownloadState.QUEUED and card.winfo_manager()
+        ]
+        queued_cards = [card for card in queued_cards if card.task.task_id != task_id]
+        queued_cards.sort(key=lambda card: card.winfo_rooty())
+        position = len(queued_order)
+        for card in queued_cards:
+            card_task_id = card.task.task_id
+            if card_task_id not in queued_order:
+                continue
+            queue_index = queued_order.index(card_task_id)
+            midpoint = card.winfo_rooty() + card.winfo_height() / 2
+            if y_root < midpoint:
+                position = queue_index
+                break
+            position = queue_index + 1
+        if downloader.move_queue_item(task_id, position):
+            self._apply_task_filters()
 
     def _delete_task(self, task_id: str) -> None:
         downloader.delete_task(task_id)
@@ -899,6 +1229,7 @@ class DownloadPage(tk.Frame):
 
         if not self._task_cards:
             self._empty_lbl.pack(expand=True, pady=60)
+        self._apply_task_filters()
         self._update_queue_label()
 
     def _clear_done(self) -> None:
@@ -915,6 +1246,7 @@ class DownloadPage(tk.Frame):
 
         if not self._task_cards:
             self._empty_lbl.pack(expand=True, pady=60)
+        self._apply_task_filters()
         self._update_queue_label()
 
     def _on_mode_change(self, mode: str) -> None:
@@ -1304,7 +1636,33 @@ class DownloadPage(tk.Frame):
         self._out_btn.configure_text(f"📁  {t('output_folder')}")
         self._list_title.configure_text(t("downloads_header"))
         self._clear_btn.configure_text(t("btn_clear_done"))
+        self._export_log_btn.configure_text(t("btn_export_log"))
         self._empty_lbl.configure(text=t("empty_downloads"))
+        self._no_results_lbl.configure(text=t("queue_no_results"))
+        self._queue_search_hint.configure(text=t("queue_search_placeholder"))
+        self._status_filter_var.set(t(f"queue_filter_{self._queue_status_filter}"))
+        self._type_filter_var.set(t(f"queue_type_{self._queue_type_filter}"))
+        self._build_filter_menu(
+            self._status_filter_menu,
+            "queue_filter",
+            ("all", "active", "queued", "paused", "finished", "failed"),
+            self._set_status_filter,
+        )
+        self._build_filter_menu(
+            self._type_filter_menu,
+            "queue_type",
+            ("all", "video", "audio", "subtitles", "playlist"),
+            self._set_type_filter,
+        )
+        js_runtimes = get_javascript_runtimes()
+        self._js_runtime_lbl.configure(
+            text=(
+                t("js_runtime_ready", runtime=", ".join(name.title() for name in js_runtimes))
+                if js_runtimes
+                else t("js_runtime_missing")
+            ),
+            fg=P["text_secondary"] if js_runtimes else P["warning"],
+        )
         self._url_entry.update_placeholder(t("url_placeholder"))
         self._sub_src_lbl.configure_text(t("sub_source_label"))
         self._pick_fmt_btn.configure_text(f"🎯 {t('btn_pick_format')}")
@@ -1321,8 +1679,7 @@ class DownloadPage(tk.Frame):
         )
         self._update_queue_label()
 
-        for card in self._task_cards.values():
-            card.refresh(card.task)
+        self._apply_task_filters()
 
     @staticmethod
     def _short_path(p: str) -> str:

@@ -7,6 +7,8 @@ events, and application errors to a persistent log file.
 from __future__ import annotations
 
 import logging
+import os
+import re
 import sys
 from logging.handlers import RotatingFileHandler
 from pathlib import Path
@@ -21,6 +23,12 @@ _log_dir.mkdir(parents=True, exist_ok=True)
 LOG_FILE_PATH = _log_dir / "seal_desktop.log"
 
 _logger: logging.Logger | None = None
+_SENSITIVE_VALUE_RE = re.compile(
+    r"(?i)\b(cookie|set-cookie|authorization|token|access_token|refresh_token|"
+    r"session[-_]token|password|passwd|api[-_]?key|client[-_]?secret|secret|signature)"
+    r"(\s*[:=]\s*)[^\r\n,;]+"
+)
+_URL_QUERY_RE = re.compile(r"""(?i)(https?://[^\s"'<>?]+)\?[^\s"'<>]*""")
 
 
 def get_logger() -> logging.Logger:
@@ -71,3 +79,23 @@ class YtDlpLogger:
 
     def error(self, msg: str) -> None:
         get_logger().error("[yt-dlp] %s", msg)
+
+
+def sanitize_log_text(text: str) -> str:
+    """Redact URL queries, credentials, and the current user's home path."""
+    sanitized = _URL_QUERY_RE.sub(r"\1?<query-redacted>", text)
+    sanitized = _SENSITIVE_VALUE_RE.sub(r"\1\2[REDACTED]", sanitized)
+    home = str(Path.home())
+    if home:
+        sanitized = re.sub(re.escape(home), "~", sanitized, flags=re.IGNORECASE)
+    return sanitized
+
+
+def export_sanitized_log(destination: str | Path) -> Path:
+    """Write a sanitized copy of the current application log."""
+    output = Path(destination)
+    if os.path.normcase(output.resolve()) == os.path.normcase(LOG_FILE_PATH.resolve()):
+        raise OSError("Choose a destination other than the original application log.")
+    sanitized = sanitize_log_text(LOG_FILE_PATH.read_text(encoding="utf-8"))
+    output.write_text(sanitized, encoding="utf-8")
+    return output

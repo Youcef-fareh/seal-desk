@@ -4,12 +4,20 @@ PyInstaller spec for Seal Desktop.
 Produces a single-directory bundle for Windows/macOS/Linux.
 """
 
+import shutil
 import sys
 from pathlib import Path
 
-from PyInstaller.utils.hooks import collect_all
+from PyInstaller.utils.hooks import collect_all, collect_submodules
 
 datas_imageio, binaries_imageio, hiddenimports_imageio = collect_all("imageio_ffmpeg")
+hiddenimports_youtube_js = collect_submodules("yt_dlp.extractor.youtube.jsc")
+
+deno_path = shutil.which("deno")
+if deno_path:
+    binaries_imageio.append((deno_path, "deno"))
+else:
+    print("Deno was not found at build time; packaged YouTube downloads will use a system runtime.")
 
 block_cipher = None
 
@@ -31,7 +39,7 @@ a = Analysis(
         "tkinter.ttk",
         "tkinter.filedialog",
         "tkinter.messagebox",
-    ] + hiddenimports_imageio,
+    ] + hiddenimports_imageio + hiddenimports_youtube_js,
     hookspath=[],
     hooksconfig={},
     runtime_hooks=[],
@@ -90,8 +98,8 @@ if sys.platform == "darwin":
         bundle_identifier="com.sealdesktop.app",
         info_plist={
             "CFBundleDisplayName": "Seal Desktop",
-            "CFBundleVersion": "1.5.4",
-            "CFBundleShortVersionString": "1.5.4",
+            "CFBundleVersion": "1.5.5",
+            "CFBundleShortVersionString": "1.5.5",
             "NSHighResolutionCapable": True,
         },
     )

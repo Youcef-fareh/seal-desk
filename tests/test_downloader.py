@@ -5,6 +5,8 @@ Tests core downloader, sequential queue, pause/resume, deletion, i18n, updater, 
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from src.core.downloader import (
     Downloader,
     DownloadPreferences,
@@ -117,21 +119,80 @@ def test_downloader_queue_and_controls():
 
 def test_downloader_retry_reuses_failed_task(monkeypatch):
     dl = Downloader()
+    before = DownloadTask(url="https://example.com/watch?v=before", state=DownloadState.QUEUED)
     task = DownloadTask(
         url="https://example.com/watch?v=retry",
         state=DownloadState.ERROR,
         error="temporary failure",
     )
+    after = DownloadTask(url="https://example.com/watch?v=after", state=DownloadState.QUEUED)
+    dl._tasks[before.task_id] = before
     dl._tasks[task.task_id] = task
-    dl._queue.append(task.task_id)
+    dl._tasks[after.task_id] = after
+    dl._queue.extend((before.task_id, task.task_id, after.task_id))
     monkeypatch.setattr(dl, "start_queue", lambda: None)
 
     assert dl.retry_download(task.task_id) is True
     assert dl.retry_download(task.task_id) is False
-    assert len(dl.get_tasks()) == 1
-    assert dl.get_tasks()[0].state == DownloadState.QUEUED
-    assert dl.get_queued_count() == 1
+    assert len(dl.get_tasks()) == 3
+    assert task.state == DownloadState.QUEUED
+    assert dl.get_queued_count() == 3
     assert dl._queue.count(task.task_id) == 1
+    assert dl.get_queue_order() == [before.task_id, task.task_id, after.task_id]
+
+
+def test_downloader_reorders_only_queued_tasks():
+    dl = Downloader()
+    first = DownloadTask(state=DownloadState.QUEUED)
+    active = DownloadTask(state=DownloadState.DOWNLOADING)
+    second = DownloadTask(state=DownloadState.QUEUED)
+    third = DownloadTask(state=DownloadState.QUEUED)
+    dl._tasks = {task.task_id: task for task in (first, active, second, third)}
+    dl._queue = [first.task_id, active.task_id, second.task_id, third.task_id]
+
+    assert dl.move_queue_item(third.task_id, 0) is True
+    assert dl.get_queue_order() == [third.task_id, first.task_id, second.task_id]
+    assert dl.reorder_queue(first.task_id, 1) is True
+    assert dl.get_queue_order() == [third.task_id, second.task_id, first.task_id]
+    assert dl.get_queue_positions() == {
+        third.task_id: 1,
+        second.task_id: 2,
+        first.task_id: 3,
+    }
+
+
+def test_pending_queue_is_restored_and_ordered(monkeypatch):
+    class FakeSettings:
+        def __init__(self):
+            self.values = {"pending_downloads": []}
+
+        def get(self, key, default=None):
+            return self.values.get(key, default)
+
+        def set(self, key, value):
+            self.values[key] = value
+
+    fake_settings = FakeSettings()
+    monkeypatch.setattr("src.core.downloader.settings", fake_settings)
+
+    original = Downloader(persist_queue=True)
+    first = DownloadTask(url="https://example.com/1", title="First", state=DownloadState.QUEUED)
+    second = DownloadTask(
+        url="https://example.com/2",
+        title="Second",
+        state=DownloadState.PAUSED,
+        prefs=DownloadPreferences(extract_audio=True),
+    )
+    original._tasks = {first.task_id: first, second.task_id: second}
+    original._queue = [first.task_id, second.task_id]
+    original._persist_queue()
+
+    restored = Downloader(persist_queue=True)
+
+    assert restored.get_queue_order() == [first.task_id]
+    assert [task.title for task in restored.get_tasks()] == ["First", "Second"]
+    assert restored.get_tasks()[1].state == DownloadState.PAUSED
+    assert restored.get_tasks()[1].is_audio is True
 
 
 def test_downloader_queue_toggle():
@@ -192,11 +253,12 @@ def test_ffmpeg_utils():
 
 
 def test_updater_version_check():
-    assert CURRENT_VERSION == "1.5.4"
+    assert CURRENT_VERSION == "1.5.5"
     assert is_newer_version("v1.5.1") is False
     assert is_newer_version("v1.5.2") is False
     assert is_newer_version("v1.5.3") is False
-    assert is_newer_version("v1.5.5") is True
+    assert is_newer_version("v1.5.4") is False
+    assert is_newer_version("v1.5.6") is True
 
     assert _parse_version_tuple("v1.2.0") == (1, 2, 0)
     assert _parse_version_tuple("1.0.0") == (1, 0, 0)
@@ -215,7 +277,7 @@ def test_updater_version_check():
 
 
 def test_settings_get_default(monkeypatch, tmp_path):
-    from src.core.settings import DEFAULTS, Settings
+    from src.core.settings import Settings
 
     monkeypatch.setattr("src.core.settings._config_path", lambda: tmp_path / "settings.json")
     s = Settings()
@@ -289,13 +351,66 @@ def test_video_codec_opts():
     assert "format_sort" not in opts_auto
 
 
-def test_prefetch_task_info(monkeypatch):
+def test_video_without_ffmpeg_never_selects_separate_streams(monkeypatch):
+    import threading
+
+    monkeypatch.setattr("src.core.downloader.get_ffmpeg_path", lambda: None)
+
     dl = Downloader()
+    task = DownloadTask()
+    opts = dl._build_opts(
+        task,
+        DownloadPreferences(video_quality="best"),
+        threading.Event(),
+        threading.Event(),
+    )
+
+    assert opts["format"] == "best[ext=mp4]/best"
+    assert "+" not in opts["format"]
+    assert "merge_output_format" not in opts
+
+
+def test_split_stream_download_requires_merged_file(tmp_path):
+    import pytest
+    import yt_dlp
+
+    task = DownloadTask(output_path=str(tmp_path / "video.f397.mp4"))
+    Path(task.output_path).touch()
+    info = {"requested_formats": [{"format_id": "397"}, {"format_id": "251"}]}
+
+    with pytest.raises(yt_dlp.utils.DownloadError, match="did not merge"):
+        Downloader._validate_download_result(info, task, DownloadPreferences())
+
+
+def test_split_stream_download_accepts_existing_merged_file(tmp_path):
+    task = DownloadTask(output_path=str(tmp_path / "video.mp4"))
+    Path(task.output_path).touch()
+    info = {"requested_formats": [{"format_id": "397"}, {"format_id": "251"}]}
+
+    Downloader._validate_download_result(info, task, DownloadPreferences())
+
+
+def test_prefetch_task_info(monkeypatch):
+    class FakeSettings:
+        def __init__(self):
+            self.values = {"pending_downloads": []}
+
+        def get(self, key, default=None):
+            return self.values.get(key, default)
+
+        def set(self, key, value):
+            self.values[key] = value
+
+    fake_settings = FakeSettings()
+    monkeypatch.setattr("src.core.downloader.settings", fake_settings)
+    dl = Downloader(persist_queue=True)
     prefs = DownloadPreferences(video_codec="h264", video_quality="1080")
     task = DownloadTask(url="https://example.com/test", prefs=prefs, state=DownloadState.QUEUED)
     dl._tasks[task.task_id] = task
+    dl._queue.append(task.task_id)
 
     fake_info = {
+        "_type": "playlist",
         "title": "Awesome Sample Video",
         "uploader": "Test Channel",
         "duration": 180,
@@ -328,6 +443,8 @@ def test_prefetch_task_info(monkeypatch):
     assert updated.duration_str == "03:00"
     assert updated.quality_label == "1920x1080 · H264"
     assert "~50.0 MB" in updated.estimated_size
+    assert updated.is_playlist is True
+    assert fake_settings.get("pending_downloads")[0]["title"] == "Awesome Sample Video"
 
 
 def test_subtitles_build_opts():
@@ -425,6 +542,48 @@ def test_embedded_subtitle_failure_retries_media_without_subtitles(monkeypatch):
     assert task.state == DownloadState.COMPLETED
     assert task.subtitle_warning is True
     assert task.title == "Video without subtitles"
+
+
+def test_embedded_subtitle_http_error_survives_cookie_save_failure(monkeypatch):
+    import threading
+
+    import yt_dlp
+
+    dl = Downloader()
+    prefs = DownloadPreferences(embed_subtitles=True, subtitle_languages="ar")
+    task = DownloadTask(url="https://example.com/watch?v=video", prefs=prefs)
+    dl._tasks[task.task_id] = task
+    options_seen = []
+
+    class FakeYDL:
+        def __init__(self, opts):
+            self.opts = opts
+            options_seen.append(opts)
+
+        def __enter__(self):
+            return self
+
+        def __exit__(self, *args):
+            if self.opts.get("writesubtitles"):
+                raise OSError(9, "Bad file descriptor")
+
+        def extract_info(self, url, download=False):
+            return {"title": "Video with subtitles", "subtitles": {"ar": [{}]}}
+
+        def download(self, urls):
+            if self.opts.get("writesubtitles"):
+                raise yt_dlp.utils.DownloadError(
+                    "Unable to download video subtitles for 'ar': HTTP Error 429: Too Many Requests"
+                )
+
+    monkeypatch.setattr("yt_dlp.YoutubeDL", FakeYDL)
+    dl._worker(task, prefs, threading.Event(), threading.Event())
+
+    assert len(options_seen) == 2
+    assert options_seen[0].get("writesubtitles") is True
+    assert not options_seen[1].get("writesubtitles")
+    assert task.state == DownloadState.COMPLETED
+    assert task.subtitle_warning is True
 
 
 def test_missing_subtitles_still_completes_media_download(monkeypatch):

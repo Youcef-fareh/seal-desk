@@ -6,8 +6,9 @@ from __future__ import annotations
 
 import json
 import socket
-import urllib.request
 import urllib.error
+import urllib.request
+
 import pytest
 
 from src.core.api_server import ApiServer
@@ -60,13 +61,15 @@ def test_api_status(api_server):
 def test_api_download_post(api_server):
     _, port, added_tasks = api_server
     url = f"http://127.0.0.1:{port}/api/download"
-    payload = json.dumps({
-        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "title": "Never Gonna Give You Up",
-        "extract_audio": False,
-        "video_quality": "1080",
-        "auto_start": False,  # Keep it queued for test safety
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "title": "Never Gonna Give You Up",
+            "extract_audio": False,
+            "video_quality": "1080",
+            "auto_start": False,  # Keep it queued for test safety
+        }
+    ).encode("utf-8")
 
     req = urllib.request.Request(
         url,
@@ -116,14 +119,16 @@ def test_api_options_cors(api_server):
 def test_api_download_subtitles_post(api_server):
     _, port, added_tasks = api_server
     url = f"http://127.0.0.1:{port}/api/download"
-    payload = json.dumps({
-        "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
-        "title": "Never Gonna Give You Up Subs",
-        "download_mode": "subtitles",
-        "subtitle_source": "both",
-        "subtitle_languages": "en,ar",
-        "auto_start": False,
-    }).encode("utf-8")
+    payload = json.dumps(
+        {
+            "url": "https://www.youtube.com/watch?v=dQw4w9WgXcQ",
+            "title": "Never Gonna Give You Up Subs",
+            "download_mode": "subtitles",
+            "subtitle_source": "both",
+            "subtitle_languages": "en,ar",
+            "auto_start": False,
+        }
+    ).encode("utf-8")
 
     req = urllib.request.Request(
         url,
